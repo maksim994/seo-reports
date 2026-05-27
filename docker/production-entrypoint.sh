@@ -26,5 +26,14 @@ if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     php artisan migrate --force --no-interaction
 fi
 
+case "${CONTAINER_ROLE:-web}" in
+    worker)
+        exec php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+        ;;
+    scheduler)
+        exec php artisan schedule:work
+        ;;
+esac
+
 php-fpm -D
 exec nginx -g 'daemon off;'

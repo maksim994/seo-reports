@@ -17,6 +17,33 @@ flowchart LR
     web --> s3[(S3 Storage)]
 ```
 
+## Coolify v4 — пошагово: worker
+
+В v4.0.0 **нет** поля Start Command во Advanced. Worker создаётся как **второе Application** с env `CONTAINER_ROLE=worker`.
+
+### 1. Web (уже есть)
+
+- **Custom Docker Options** — **пусто** (убери `php artisan queue:work...`)
+- **CONTAINER_ROLE** — `web` или не задавай (default)
+- Домен: `https://seo-report.mv-deploy.ru`
+
+### 2. Worker (новое приложение)
+
+1. Project → **+ New** → **Application** → Public Git → `maksim994/seo-reports`, branch `main`
+2. **General:** Build Pack Dockerfile, `/Dockerfile`, target `production` — как у web
+3. **Domains** — удалить / не указывать (worker не публичный)
+4. **Environment Variables:**
+   - Скопировать все env с web
+   - Добавить: `CONTAINER_ROLE=worker`
+5. **Healthcheck** — **Disable**
+6. **Deploy**
+
+### 3. Проверка
+
+Logs worker → `Processing: App\Jobs\GenerateReportJob`
+
+---
+
 ## Services в Coolify
 
 Из одного Docker image создаются **3 application**.
@@ -47,8 +74,17 @@ flowchart LR
 
 | Параметр | Значение |
 |----------|----------|
-| Same image | да |
-| Start command | `php artisan queue:work --sleep=3 --tries=3 --max-time=3600` |
+| Same image | да (новое Application в том же Project) |
+| Domains | **не назначать** |
+| Healthcheck | **выключить** |
+| Environment | `CONTAINER_ROLE=worker` + те же env, что у web |
+
+> **Coolify v4.0.0:** отдельного поля Start Command нет. Worker запускается через env `CONTAINER_ROLE=worker` (см. `docker/production-entrypoint.sh`).
+
+Альтернатива (если UI позволяет без кавычек): Custom Docker Options → `--entrypoint php` — не рекомендуется, ломает наш entrypoint.
+
+| Параметр | Значение |
+|----------|----------|
 | Replicas | 1–2 |
 
 ### 3. Scheduler (`seo-reports-scheduler`)
@@ -56,7 +92,9 @@ flowchart LR
 | Параметр | Значение |
 |----------|----------|
 | Same image | да |
-| Start command | `php artisan schedule:work` |
+| Domains | не назначать |
+| Healthcheck | выключить |
+| Environment | `CONTAINER_ROLE=scheduler` |
 | Replicas | 1 |
 
 ## Databases
