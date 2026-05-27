@@ -19,7 +19,20 @@ flowchart LR
 
 ## Services в Coolify
 
-Из одного Docker image (`docker/Dockerfile`, target: production) создаются **3 application**:
+Из одного Docker image создаются **3 application**.
+
+**Build settings (General):**
+
+| Параметр | Значение |
+|----------|----------|
+| Base Directory | `/` (корень репозитория) |
+| Dockerfile | `Dockerfile` (симлинк на `docker/Dockerfile`) |
+| Docker Build Target | `production` |
+| Port | 80 |
+
+> Coolify по умолчанию ищет `./Dockerfile` в корне. Если указать только `docker/Dockerfile` — тоже работает.
+
+**Build-time env:** переменные вроде `APP_ENV=production` лучше пометить как **Runtime only** в Coolify (BuildKit предупреждает, что prod env на этапе сборки может мешать).
 
 ### 1. Web (`seo-reports-web`)
 
