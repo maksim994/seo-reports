@@ -35,9 +35,11 @@ return [
     ],
 
     'logos' => [
-        'yandex_metrika' => '/integrations/yandex-metrika.svg',
-        'yandex_webmaster' => '/integrations/yandex-webmaster.svg',
-        'topvisor' => env('TOPVISOR_LOGO_URL', '/integrations/topvisor.svg'),
-        'keys_so' => env('KEYSSO_LOGO_URL', '/integrations/keysso.png'),
+        // Logo URLs are resolved in the frontend (Vite assets). Do not use /integrations/*
+        // as a static path — it conflicts with the SPA route /integrations.
+        'yandex_metrika' => null,
+        'yandex_webmaster' => null,
+        'topvisor' => env('TOPVISOR_LOGO_URL'),
+        'keys_so' => env('KEYSSO_LOGO_URL'),
     ],
 ];
