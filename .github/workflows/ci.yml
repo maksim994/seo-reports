@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: seo_reports_test
+          POSTGRES_USER: seo_reports
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, redis
+      - name: Install dependencies
+        working-directory: backend
+        run: composer install --prefer-dist --no-interaction
+      - name: Prepare env
+        working-directory: backend
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php -r "file_put_contents('.env', preg_replace('/DB_DATABASE=.*/', 'DB_DATABASE=seo_reports_test', file_get_contents('.env')));"
+      - name: Run tests
+        working-directory: backend
+        run: php artisan test
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install & build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build

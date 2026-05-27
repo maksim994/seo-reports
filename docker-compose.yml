@@ -1,0 +1,127 @@
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./backend:/var/www/backend:ro
+      - frontend_dist:/var/www/frontend:ro
+    depends_on:
+      - app
+      - frontend
+    networks:
+      - seo-reports
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+    volumes:
+      - ./backend:/var/www/backend
+      - backend_vendor:/var/www/backend/vendor
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - seo-reports
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+    command: php artisan queue:work --sleep=3 --tries=3
+    volumes:
+      - ./backend:/var/www/backend
+      - backend_vendor:/var/www/backend/vendor
+    depends_on:
+      - app
+      - redis
+    networks:
+      - seo-reports
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+    command: php artisan schedule:work
+    volumes:
+      - ./backend:/var/www/backend
+      - backend_vendor:/var/www/backend/vendor
+    depends_on:
+      - app
+    networks:
+      - seo-reports
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: /api
+    networks:
+      - seo-reports
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-seo_reports}
+      POSTGRES_USER: ${DB_USERNAME:-seo_reports}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-seo_reports}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - seo-reports
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - seo-reports
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - seo-reports
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - seo-reports
+
+volumes:
+  postgres_data:
+  minio_data:
+  frontend_node_modules:
+  frontend_dist:
+  backend_vendor:
+
+networks:
+  seo-reports:
+    driver: bridge
