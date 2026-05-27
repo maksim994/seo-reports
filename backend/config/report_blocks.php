@@ -22,6 +22,10 @@ return [
             'label' => 'Текстовый блок',
             'description' => 'Произвольный текст или комментарии',
             'required_integration' => null,
+            'settings_schema' => [
+                ['key' => 'title', 'label' => 'Заголовок', 'type' => 'text', 'default' => 'Комментарии'],
+                ['key' => 'content', 'label' => 'Текст', 'type' => 'textarea', 'default' => 'Раздел для ручных комментариев специалиста.'],
+            ],
         ],
         [
             'block_type' => 'metrika_overview',
@@ -209,22 +213,25 @@ return [
             'block_type' => 'positions_visibility',
             'category' => 'positions',
             'label' => 'Позиции: видимость',
-            'description' => 'Видимость сайта и средняя позиция из Topvisor',
-            'required_integration' => 'topvisor',
+            'description' => 'Видимость сайта и средняя позиция (Topvisor или Keys.so)',
+            'required_integration' => null,
         ],
         [
             'block_type' => 'positions_top_distribution',
             'category' => 'positions',
             'label' => 'Позиции: TOP-N',
             'description' => 'Распределение ключей по TOP-3/10/30/100',
-            'required_integration' => 'topvisor',
+            'required_integration' => null,
         ],
         [
             'block_type' => 'positions_table',
             'category' => 'positions',
             'label' => 'Позиции: таблица ключей',
             'description' => 'Ключевые фразы с позициями и динамикой',
-            'required_integration' => 'topvisor',
+            'required_integration' => null,
+            'settings_schema' => [
+                ['key' => 'limit', 'label' => 'Количество ключей', 'type' => 'number', 'default' => 50, 'min' => 1, 'max' => 200],
+            ],
         ],
     ],
 

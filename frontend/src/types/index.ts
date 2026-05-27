@@ -57,8 +57,10 @@ export interface IntegrationProviderMeta {
   label: string
   description: string
   icon: string
+  logo_url?: string | null
   configured: boolean
   auth_type?: 'oauth' | 'api_key'
+  api_key_fields?: Array<'user_id' | 'api_key'>
 }
 
 export interface WorkItem {
@@ -76,6 +78,7 @@ export interface Integration {
   id: number
   provider: string
   label: string
+  logo_url?: string | null
   status: 'active' | 'token_expired' | 'error'
   account_label: string | null
   expires_at: string | null
@@ -104,6 +107,16 @@ export interface ReportBlockCatalogItem {
   label: string
   description: string
   required_integration: string | null
+  settings_schema?: BlockSettingsField[]
+}
+
+export interface BlockSettingsField {
+  key: string
+  label: string
+  type: 'text' | 'textarea' | 'number'
+  default?: string | number
+  min?: number
+  max?: number
 }
 
 export interface TemplateBlockItem {
@@ -120,6 +133,7 @@ export interface ReportTemplate {
   id: number
   name: string
   description: string | null
+  logo_url: string | null
   is_default: boolean
   blocks_count?: number
   blocks?: TemplateBlockItem[]

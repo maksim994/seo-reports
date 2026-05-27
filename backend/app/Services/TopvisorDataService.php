@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\ReportFetch;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -9,50 +10,98 @@ class TopvisorDataService
 {
     private const BASE_URL = 'https://api.topvisor.com/v2/json';
 
-    /** @return list<array{id: int, name: string, site: string, searchers: array<int, mixed>}> */
+    /** @return list<array{id: int, name: string, url: string, on: int, searchers: array<int, mixed>, regions: list<array{index: int, searcher: string, region: string, label: string}>}> */
     public function listProjects(string $userId, string $apiKey): array
     {
-        $response = $this->request($userId, $apiKey, 'get', 'projects_2', 'projects', [
-            'show_searchers_and_regions' => 1,
-        ]);
+        $projects = [];
+        $offset = 0;
+        $limit = 100;
 
-        return collect($response['result'] ?? [])
+        do {
+            $response = $this->request($userId, $apiKey, 'get', 'projects_2', 'projects', [
+                'limit' => $limit,
+                'offset' => $offset,
+                'fields' => ['id', 'name', 'url', 'on'],
+                'show_searchers_and_regions' => 1,
+            ]);
+
+            $batch = $response['result'] ?? [];
+            if (! is_array($batch) || $batch === []) {
+                break;
+            }
+
+            foreach ($batch as $project) {
+                if (! is_array($project)) {
+                    continue;
+                }
+
+                $normalized = $this->normalizeProject($project);
+                if ($normalized['id'] > 0) {
+                    $projects[] = $normalized;
+                }
+            }
+
+            $nextOffset = $response['nextOffset'] ?? null;
+            if ($nextOffset === null) {
+                break;
+            }
+
+            $offset = (int) $nextOffset;
+        } while (true);
+
+        return $projects;
+    }
+
+    /** @return list<array{id: string, label: string, meta?: array<string, mixed>}> */
+    public function listProjectResources(string $userId, string $apiKey): array
+    {
+        return collect($this->listProjects($userId, $apiKey))
+            ->filter(fn (array $project) => ($project['on'] ?? 1) !== 0)
             ->map(fn (array $project) => [
-                'id' => (int) ($project['id'] ?? 0),
-                'name' => (string) ($project['name'] ?? ''),
-                'site' => (string) ($project['site'] ?? ''),
-                'searchers' => $project['searchers'] ?? [],
+                'id' => (string) $project['id'],
+                'label' => $this->projectResourceLabel($project),
+                'meta' => [
+                    'project_id' => $project['id'],
+                    'name' => $project['name'],
+                    'url' => $project['url'],
+                    'site' => $project['url'],
+                    'project_name' => $this->projectDisplayName($project),
+                    'regions' => $project['regions'],
+                ],
             ])
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
             ->all();
     }
 
-    /** @return list<array{id: string, label: string, meta?: array<string, mixed>}> */
-    public function listBindableResources(string $userId, string $apiKey): array
-    {
-        $resources = [];
+    public function resolveRegionIndex(
+        string $userId,
+        string $apiKey,
+        int $projectId,
+        ?int $preferred = null,
+    ): int {
+        if ($preferred !== null && $preferred > 0) {
+            return $preferred;
+        }
 
-        foreach ($this->listProjects($userId, $apiKey) as $project) {
-            foreach ($project['searchers'] as $searcher) {
-                $searcherName = (string) ($searcher['name'] ?? 'ПС');
-                foreach ($searcher['regions'] ?? [] as $region) {
-                    $regionIndex = (int) ($region['index'] ?? 0);
-                    $regionName = (string) ($region['areaName'] ?? $region['name'] ?? 'Регион');
+        $project = collect($this->listProjects($userId, $apiKey))->firstWhere('id', $projectId);
+        if (! $project) {
+            throw new RuntimeException("Topvisor project {$projectId} not found.");
+        }
 
-                    $resources[] = [
-                        'id' => $project['id'].':'.$regionIndex,
-                        'label' => $project['name'].' · '.$searcherName.' · '.$regionName,
-                        'meta' => [
-                            'project_id' => $project['id'],
-                            'region_index' => $regionIndex,
-                            'site' => $project['site'],
-                        ],
-                    ];
-                }
+        foreach ($project['regions'] as $region) {
+            $searcher = mb_strtolower($region['searcher']);
+            if (str_contains($searcher, 'yandex') || str_contains($searcher, 'яндекс')) {
+                return $region['index'];
             }
         }
 
-        return $resources;
+        $first = $project['regions'][0]['index'] ?? 0;
+        if ($first <= 0) {
+            throw new RuntimeException("Topvisor project {$projectId} has no tracked regions.");
+        }
+
+        return $first;
     }
 
     /** @return array{visibility: float|null, visibility_dynamic: float|null, tops: array<string, int>, avg: float|null} */
@@ -129,19 +178,89 @@ class TopvisorDataService
         return $rows;
     }
 
-    /** @return array{project_id: int, region_index: int} */
+    /** @return array{project_id: int, region_index: int|null} */
     public function parseBindingResourceId(string $resourceId): array
     {
-        if (! str_contains($resourceId, ':')) {
-            return ['project_id' => (int) $resourceId, 'region_index' => 0];
+        if (str_contains($resourceId, ':')) {
+            [$projectId, $regionIndex] = explode(':', $resourceId, 2);
+
+            return [
+                'project_id' => (int) $projectId,
+                'region_index' => (int) $regionIndex,
+            ];
         }
 
-        [$projectId, $regionIndex] = explode(':', $resourceId, 2);
+        return [
+            'project_id' => (int) $resourceId,
+            'region_index' => null,
+        ];
+    }
+
+    /** @param  array<string, mixed>  $project */
+    private function normalizeProject(array $project): array
+    {
+        $name = trim((string) ($project['name'] ?? $project['project_name'] ?? ''));
+        $url = trim((string) ($project['url'] ?? $project['site'] ?? $project['host'] ?? ''));
 
         return [
-            'project_id' => (int) $projectId,
-            'region_index' => (int) $regionIndex,
+            'id' => (int) ($project['id'] ?? 0),
+            'name' => $name,
+            'url' => $url,
+            'on' => (int) ($project['on'] ?? 1),
+            'searchers' => $project['searchers'] ?? [],
+            'regions' => $this->extractRegions($project),
         ];
+    }
+
+    /** @return list<array{index: int, searcher: string, region: string, label: string}> */
+    private function extractRegions(array $project): array
+    {
+        $regions = [];
+        $seen = [];
+
+        foreach ($project['searchers'] ?? [] as $searcher) {
+            $searcherName = (string) ($searcher['name'] ?? 'ПС');
+            foreach ($searcher['regions'] ?? [] as $region) {
+                $index = (int) ($region['index'] ?? 0);
+                if ($index <= 0 || isset($seen[$index])) {
+                    continue;
+                }
+
+                $seen[$index] = true;
+                $regionName = (string) ($region['areaName'] ?? $region['name'] ?? 'Регион');
+                $regions[] = [
+                    'index' => $index,
+                    'searcher' => $searcherName,
+                    'region' => $regionName,
+                    'label' => $searcherName.' · '.$regionName,
+                ];
+            }
+        }
+
+        return $regions;
+    }
+
+    /** @param  array{id: int, name: string, url: string}  $project */
+    private function projectDisplayName(array $project): string
+    {
+        $name = trim($project['name']);
+        $url = trim($project['url']);
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        if ($url !== '') {
+            return $url;
+        }
+
+        return 'Проект #'.$project['id'];
+    }
+
+    /** @param  array{id: int, name: string, url: string}  $project */
+    private function projectResourceLabel(array $project): string
+    {
+        return $this->projectDisplayName($project).' (#'.$project['id'].')';
     }
 
     private function parsePosition(mixed $value): ?float
@@ -167,24 +286,29 @@ class TopvisorDataService
             ? $apiKey
             : 'bearer '.$apiKey;
 
-        $response = Http::withHeaders([
-            'User-Id' => $userId,
-            'Authorization' => $authorization,
-            'Content-Type' => 'application/json',
-        ])->post($url, $payload);
+        return ReportFetch::remember(
+            'topvisor.'.sha1($userId.'|'.$apiKey.'|'.$operation.'|'.$service.'|'.$method.'|'.json_encode($payload)),
+            function () use ($userId, $apiKey, $operation, $service, $method, $payload, $url, $authorization) {
+                $response = Http::withHeaders([
+                    'User-Id' => $userId,
+                    'Authorization' => $authorization,
+                    'Content-Type' => 'application/json',
+                ])->post($url, $payload);
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Topvisor API error: '.$response->body());
-        }
+                if (! $response->successful()) {
+                    throw new RuntimeException('Topvisor API error: '.$response->body());
+                }
 
-        $json = $response->json();
-        if (isset($json['errors']) && is_array($json['errors']) && $json['errors'] !== []) {
-            $message = collect($json['errors'])->pluck('string')->filter()->first()
-                ?? 'Unknown Topvisor error';
+                $json = $response->json();
+                if (isset($json['errors']) && is_array($json['errors']) && $json['errors'] !== []) {
+                    $message = collect($json['errors'])->pluck('string')->filter()->first()
+                        ?? 'Unknown Topvisor error';
 
-            throw new RuntimeException('Topvisor API error: '.$message);
-        }
+                    throw new RuntimeException('Topvisor API error: '.$message);
+                }
 
-        return is_array($json) ? $json : [];
+                return is_array($json) ? $json : [];
+            },
+        );
     }
 }

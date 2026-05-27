@@ -90,7 +90,7 @@ class ReportGenerationTest extends TestCase
 
         $htmlFile = $job->files->firstWhere('format', 'html');
         $html = Storage::disk('local')->get($htmlFile->path);
-        $this->assertStringContainsString('hbar-table', $html);
+        $this->assertStringContainsString('apex-chart', $html);
         $this->assertStringContainsString('section-card', $html);
 
         $this->actingAs($user)
@@ -119,5 +119,49 @@ class ReportGenerationTest extends TestCase
         $response = $this->actingAs($user)->getJson("/api/projects/{$project->id}/reports");
 
         $response->assertOk()->assertJsonCount(10, 'data');
+    }
+
+    public function test_user_can_delete_own_report(): void
+    {
+        Storage::fake('local');
+        config(['reports.storage_disk' => 'local']);
+
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $project = Project::factory()->for($user)->create();
+        $template = ReportTemplate::create(['user_id' => $user->id, 'name' => 'Tpl']);
+
+        $job = \App\Models\ReportJob::create([
+            'user_id' => $user->id,
+            'project_id' => $project->id,
+            'report_template_id' => $template->id,
+            'status' => ReportJobStatus::Done,
+            'period_start' => '2026-04-01',
+            'period_end' => '2026-04-30',
+        ]);
+
+        $path = 'reports/'.$job->id.'/report.html';
+        Storage::disk('local')->put($path, '<html></html>');
+        $job->files()->create(['format' => 'html', 'path' => $path, 'size' => 13]);
+
+        $this->actingAs($user)
+            ->deleteJson("/api/reports/{$job->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('report_jobs', ['id' => $job->id]);
+        Storage::disk('local')->assertMissing($path);
+
+        $foreignJob = \App\Models\ReportJob::create([
+            'user_id' => $user->id,
+            'project_id' => $project->id,
+            'report_template_id' => $template->id,
+            'status' => ReportJobStatus::Done,
+            'period_start' => '2026-04-01',
+            'period_end' => '2026-04-30',
+        ]);
+
+        $this->actingAs($other)
+            ->deleteJson("/api/reports/{$foreignJob->id}")
+            ->assertForbidden();
     }
 }

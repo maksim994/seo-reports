@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $chartItems = collect($rows)->map(fn (array $row) => [
         'label' => $row['page'] ?? '—',
         'value' => (float) ($row['clicks'] ?? 0),

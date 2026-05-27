@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $compareItems = [];
     if (!empty($yandex)) {
         $compareItems[] = [

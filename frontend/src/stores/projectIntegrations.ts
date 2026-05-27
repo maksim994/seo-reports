@@ -20,6 +20,7 @@ export const useProjectIntegrationsStore = defineStore('projectIntegrations', ()
       integration_id: number
       external_resource_id: string
       external_resource_label?: string | null
+      config?: Record<string, unknown>
     },
   ) {
     const { data } = await api.post<{ data: ProjectIntegrationBinding }>(

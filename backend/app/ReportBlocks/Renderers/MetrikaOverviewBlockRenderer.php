@@ -56,6 +56,11 @@ class MetrikaOverviewBlockRenderer implements ReportBlockRendererInterface
 
             return new ReportBlockResult($html, 'Метрика: обзор');
         } catch (Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Report block data fetch failed', [
+                'block' => 'metrika_overview',
+                'message' => $e->getMessage(),
+            ]);
+
             return $this->unavailable('Данные Метрики временно недоступны');
         }
     }

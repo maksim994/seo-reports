@@ -14,7 +14,7 @@
     };
     $comparison = null;
     if ($current) {
-        $charts = app(\App\Services\ReportChartBuilder::class);
+        $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
         $comparison = $charts->comparisonChart([
             ['label' => 'Визиты', 'current' => $current['visits'] ?? 0, 'previous' => $previous['visits'] ?? null],
             ['label' => 'Пользователи', 'current' => $current['users'] ?? 0, 'previous' => $previous['users'] ?? null],

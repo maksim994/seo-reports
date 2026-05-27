@@ -49,6 +49,11 @@ export const useReportsStore = defineStore('reports', () => {
     return `/api/reports/${id}/download/${format}`
   }
 
+  async function deleteReport(id: number) {
+    await api.delete(`/reports/${id}`)
+    reports.value = reports.value.filter((r) => r.id !== id)
+  }
+
   return {
     reports,
     loading,
@@ -58,5 +63,6 @@ export const useReportsStore = defineStore('reports', () => {
     generateReport,
     previewUrl,
     downloadUrl,
+    deleteReport,
   }
 })

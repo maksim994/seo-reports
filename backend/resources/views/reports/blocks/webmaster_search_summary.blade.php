@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $cards = $summary ? $charts->summaryCards([
         ['label' => 'Клики', 'value' => number_format($summary['clicks'], 0, '.', ' ')],
         ['label' => 'Показы', 'value' => number_format($summary['shows'], 0, '.', ' ')],

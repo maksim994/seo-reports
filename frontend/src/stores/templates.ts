@@ -59,6 +59,28 @@ export const useTemplatesStore = defineStore('templates', () => {
     templates.value = templates.value.filter((t) => t.id !== id)
   }
 
+  async function uploadLogo(id: number, file: File) {
+    const form = new FormData()
+    form.append('logo', file)
+    const { data } = await api.post<{ data: ReportTemplate }>(`/templates/${id}/logo`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    const index = templates.value.findIndex((t) => t.id === id)
+    if (index !== -1) {
+      templates.value[index] = { ...templates.value[index], ...data.data }
+    }
+    return data.data
+  }
+
+  async function deleteLogo(id: number) {
+    const { data } = await api.delete<{ data: ReportTemplate }>(`/templates/${id}/logo`)
+    const index = templates.value.findIndex((t) => t.id === id)
+    if (index !== -1) {
+      templates.value[index] = { ...templates.value[index], ...data.data }
+    }
+    return data.data
+  }
+
   return {
     templates,
     catalog,
@@ -70,5 +92,7 @@ export const useTemplatesStore = defineStore('templates', () => {
     createTemplate,
     updateTemplate,
     deleteTemplate,
+    uploadLogo,
+    deleteLogo,
   }
 })

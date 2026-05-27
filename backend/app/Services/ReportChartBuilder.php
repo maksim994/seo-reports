@@ -10,10 +10,381 @@ class ReportChartBuilder
         '#16A34A', '#0891B2', '#4F46E5', '#BE185D', '#64748B',
     ];
 
+    private bool $forPdf = false;
+
+    private static int $globalChartSeq = 0;
+
+    public function forPdf(bool $forPdf = true): self
+    {
+        $this->forPdf = $forPdf;
+        self::$globalChartSeq = 0;
+
+        return $this;
+    }
+
     /**
      * @param  list<array{label: string, value: float, meta?: string}>  $items
      */
     public function horizontalBarChart(array $items, array $options = []): string
+    {
+        if ($this->forPdf) {
+            return $this->legacyHorizontalBarChart($items, $options);
+        }
+
+        $title = (string) ($options['title'] ?? '');
+        $maxItems = (int) ($options['max_items'] ?? 8);
+        $valueSuffix = (string) ($options['value_suffix'] ?? '');
+        $showShare = (bool) ($options['show_share'] ?? true);
+
+        $items = array_slice($items, 0, $maxItems);
+        if ($items === []) {
+            return '';
+        }
+
+        $total = array_sum(array_column($items, 'value'));
+        $labels = array_map(fn (array $item) => $this->truncate((string) $item['label'], 36), $items);
+        $values = array_map(fn (array $item) => round((float) $item['value'], 2), $items);
+        $height = min(420, max(220, count($items) * 42 + 60));
+
+        return $this->apexChart('bar', [
+            'chart' => ['height' => $height],
+            'series' => [['data' => $values]],
+            'xaxis' => ['categories' => $labels],
+            'plotOptions' => [
+                'bar' => [
+                    'horizontal' => true,
+                    'borderRadius' => 6,
+                    'barHeight' => '62%',
+                    'distributed' => true,
+                    'dataLabels' => ['position' => 'center'],
+                ],
+            ],
+            'dataLabels' => [
+                'enabled' => true,
+                'style' => ['fontSize' => '11px', 'fontWeight' => 600, 'colors' => ['#ffffff']],
+            ],
+            'tooltip' => [
+                'y' => [
+                    'title' => ['formatter' => '__LABEL__'],
+                ],
+                'customMeta' => array_map(function (array $item) use ($total, $showShare, $valueSuffix) {
+                    $value = (float) $item['value'];
+                    $share = ($total > 0 && $showShare) ? round(($value / $total) * 100, 1).'%' : null;
+
+                    return trim($this->formatNumber($value).$valueSuffix.($share ? ' · '.$share : ''));
+                }, $items),
+            ],
+            'grid' => ['padding' => ['left' => 8, 'right' => 16]],
+        ], $title, 'bar');
+    }
+
+    /**
+     * @param  list<array{label: string, value: float}>  $items
+     */
+    public function donutChart(array $items, array $options = []): string
+    {
+        if ($this->forPdf) {
+            return $this->legacyDonutChart($items, $options);
+        }
+
+        $title = (string) ($options['title'] ?? '');
+        $centerLabel = (string) ($options['center_label'] ?? 'Всего');
+        $maxItems = (int) ($options['max_items'] ?? 6);
+        $valueSuffix = (string) ($options['value_suffix'] ?? '');
+
+        $items = array_values(array_filter($items, fn (array $item) => ($item['value'] ?? 0) > 0));
+        $items = array_slice($items, 0, $maxItems);
+        if ($items === []) {
+            return '';
+        }
+
+        $total = array_sum(array_column($items, 'value'));
+        $labels = array_map(fn (array $item) => $this->truncate((string) $item['label'], 28), $items);
+        $values = array_map(fn (array $item) => round((float) $item['value'], 2), $items);
+
+        return $this->apexChart('donut', [
+            'chart' => ['height' => 300],
+            'series' => $values,
+            'labels' => $labels,
+            'plotOptions' => [
+                'pie' => [
+                    'donut' => [
+                        'size' => '72%',
+                        'labels' => [
+                            'show' => true,
+                            'name' => ['show' => true, 'fontSize' => '12px'],
+                            'value' => ['show' => true, 'fontSize' => '16px', 'fontWeight' => 700],
+                            'total' => [
+                                'show' => true,
+                                'label' => $centerLabel,
+                                'fontSize' => '12px',
+                                'color' => '#64748b',
+                                'formatter' => '__TOTAL__',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'legend' => [
+                'position' => 'bottom',
+                'horizontalAlign' => 'center',
+                'fontSize' => '12px',
+            ],
+            'dataLabels' => ['enabled' => false],
+            'tooltip' => [
+                'customMeta' => [
+                    'totalText' => $this->formatNumber($total).$valueSuffix,
+                ],
+            ],
+        ], $title, 'donut');
+    }
+
+    /**
+     * @param  list<array{label: string, current: float, previous?: float|null, suffix?: string}>  $metrics
+     */
+    public function comparisonChart(array $metrics, array $options = []): string
+    {
+        $hasPrevious = collect($metrics)->contains(fn (array $m) => isset($m['previous']) && $m['previous'] !== null);
+        if (! $hasPrevious) {
+            return $this->kpiCards($metrics);
+        }
+
+        if ($this->forPdf) {
+            return $this->legacyComparisonChart($metrics, $options);
+        }
+
+        $title = (string) ($options['title'] ?? 'Сравнение периодов');
+        $labels = array_map(fn (array $metric) => (string) $metric['label'], $metrics);
+        $current = array_map(fn (array $metric) => round((float) $metric['current'], 2), $metrics);
+        $previous = array_map(fn (array $metric) => round((float) ($metric['previous'] ?? 0), 2), $metrics);
+        $suffixes = array_map(fn (array $metric) => (string) ($metric['suffix'] ?? ''), $metrics);
+
+        return $this->apexChart('bar', [
+            'chart' => ['height' => 300],
+            'series' => [
+                ['name' => 'Текущий период', 'data' => $current],
+                ['name' => 'Предыдущий период', 'data' => $previous],
+            ],
+            'xaxis' => ['categories' => $labels],
+            'plotOptions' => [
+                'bar' => [
+                    'borderRadius' => 6,
+                    'columnWidth' => '48%',
+                ],
+            ],
+            'colors' => ['#2563EB', '#CBD5E1'],
+            'dataLabels' => ['enabled' => false],
+            'legend' => [
+                'position' => 'top',
+                'horizontalAlign' => 'right',
+            ],
+            'tooltip' => [
+                'customMeta' => [
+                    'suffixes' => $suffixes,
+                ],
+            ],
+        ], $title, 'comparison wide');
+    }
+
+    /**
+     * @param  list<array{label: string, current: float, suffix?: string}>  $metrics
+     */
+    public function kpiCards(array $metrics): string
+    {
+        if ($metrics === []) {
+            return '';
+        }
+
+        $cards = '';
+        foreach ($metrics as $index => $metric) {
+            $color = self::COLORS[$index % count(self::COLORS)];
+            $suffix = (string) ($metric['suffix'] ?? '');
+            $cards .= '<td class="kpi-card" style="border-top: 3px solid '.$color.'">'
+                .'<div class="kpi-value">'.e($this->formatNumber((float) $metric['current']).$suffix).'</div>'
+                .'<div class="kpi-label">'.e((string) $metric['label']).'</div>'
+                .'</td>';
+        }
+
+        return '<table class="kpi-grid" width="100%"><tr>'.$cards.'</tr></table>';
+    }
+
+    /**
+     * @param  list<array{label: string, primary: float, secondary?: float|null, primary_suffix?: string, secondary_suffix?: string}>  $items
+     */
+    public function comboBarChart(array $items, array $options = []): string
+    {
+        if ($this->forPdf) {
+            return $this->legacyComboBarChart($items, $options);
+        }
+
+        $title = (string) ($options['title'] ?? '');
+        $primaryLabel = (string) ($options['primary_label'] ?? '');
+        $secondaryLabel = (string) ($options['secondary_label'] ?? '');
+        $items = array_slice($items, 0, 8);
+        if ($items === []) {
+            return '';
+        }
+
+        $labels = array_map(fn (array $item) => $this->truncate((string) $item['label'], 34), $items);
+        $values = array_map(fn (array $item) => round((float) $item['primary'], 2), $items);
+        $height = min(420, max(220, count($items) * 42 + 60));
+        $footer = trim($primaryLabel.($secondaryLabel !== '' ? ' · '.$secondaryLabel : ''));
+
+        $meta = array_map(function (array $item) {
+            $primary = (float) $item['primary'];
+            $secondary = isset($item['secondary']) ? (float) $item['secondary'] : null;
+            $suffix = (string) ($item['primary_suffix'] ?? '');
+            $secondarySuffix = (string) ($item['secondary_suffix'] ?? '%');
+            $text = $this->formatNumber($primary).$suffix;
+            if ($secondary !== null) {
+                $text .= ' · '.number_format($secondary, 2, '.', '').$secondarySuffix;
+            }
+
+            return $text;
+        }, $items);
+
+        return $this->apexChart('bar', [
+            'chart' => ['height' => $height],
+            'series' => [['data' => $values]],
+            'xaxis' => ['categories' => $labels],
+            'plotOptions' => [
+                'bar' => [
+                    'horizontal' => true,
+                    'borderRadius' => 6,
+                    'barHeight' => '62%',
+                    'distributed' => true,
+                ],
+            ],
+            'dataLabels' => [
+                'enabled' => true,
+                'style' => ['fontSize' => '11px', 'fontWeight' => 600, 'colors' => ['#ffffff']],
+            ],
+            'tooltip' => ['customMeta' => $meta],
+        ], $title, 'bar wide', $footer !== '' ? $footer : null);
+    }
+
+    /**
+     * @param  list<array{label: string, value: float}>  $points
+     */
+    public function timeSeriesChart(array $points, array $options = []): string
+    {
+        if ($this->forPdf) {
+            return $this->legacyTimeSeriesChart($points, $options);
+        }
+
+        $title = (string) ($options['title'] ?? '');
+        $valueSuffix = (string) ($options['value_suffix'] ?? '');
+        $maxPoints = (int) ($options['max_points'] ?? 31);
+
+        $points = array_slice($points, 0, $maxPoints);
+        if ($points === []) {
+            return '';
+        }
+
+        $labels = array_map(fn (array $point) => $this->truncate((string) $point['label'], 12), $points);
+        $values = array_map(fn (array $point) => round((float) $point['value'], 2), $points);
+
+        return $this->apexChart('area', [
+            'chart' => ['height' => 280],
+            'series' => [['name' => trim($title) !== '' ? $title : 'Значение', 'data' => $values]],
+            'xaxis' => ['categories' => $labels],
+            'stroke' => ['curve' => 'smooth', 'width' => 3],
+            'fill' => [
+                'type' => 'gradient',
+                'gradient' => [
+                    'shadeIntensity' => 0.35,
+                    'opacityFrom' => 0.45,
+                    'opacityTo' => 0.05,
+                    'stops' => [0, 90, 100],
+                ],
+            ],
+            'colors' => ['#2563EB'],
+            'dataLabels' => ['enabled' => false],
+            'markers' => ['size' => 0, 'hover' => ['size' => 5]],
+            'tooltip' => [
+                'customMeta' => [
+                    'suffix' => $valueSuffix,
+                ],
+            ],
+        ], $title, 'timeseries wide');
+    }
+
+    /**
+     * @param  list<array{label: string, clicks: float, impressions: float, ctr: float}>  $rows
+     */
+    public function summaryCards(array $rows): string
+    {
+        if ($rows === []) {
+            return '';
+        }
+
+        $cards = '';
+        foreach ($rows as $index => $row) {
+            $color = self::COLORS[$index % count(self::COLORS)];
+            $cards .= '<td class="kpi-card" style="border-top: 3px solid '.$color.'">'
+                .'<div class="kpi-value">'.e((string) $row['value']).'</div>'
+                .'<div class="kpi-label">'.e((string) $row['label']).'</div>'
+                .'</td>';
+        }
+
+        return '<table class="kpi-grid" width="100%"><tr>'.$cards.'</tr></table>';
+    }
+
+    private function apexChart(string $type, array $config, string $title = '', string $class = '', ?string $footnote = null): string
+    {
+        $id = $this->nextChartId();
+        $height = (int) ($config['chart']['height'] ?? 280);
+        $options = array_replace_recursive($this->baseApexOptions($type), $config);
+        unset($options['chart']['height']);
+
+        $json = json_encode($options, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        if ($json === false) {
+            return '';
+        }
+
+        $html = ($title !== '' ? '<div class="chart-title">'.e($title).'</div>' : '')
+            .'<div id="'.e($id).'" class="apex-chart" style="min-height:'.$height.'px" data-config="'.e($json).'"></div>'
+            .($footnote !== null && $footnote !== '' ? '<div class="chart-footnote">'.e($footnote).'</div>' : '');
+
+        return $this->wrapChart($html, 'apex '.$class);
+    }
+
+    /** @return array<string, mixed> */
+    private function baseApexOptions(string $type): array
+    {
+        return [
+            'chart' => [
+                'type' => $type,
+                'fontFamily' => 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                'toolbar' => ['show' => false],
+                'zoom' => ['enabled' => false],
+                'animations' => ['enabled' => true, 'speed' => 500],
+            ],
+            'colors' => self::COLORS,
+            'grid' => [
+                'borderColor' => '#e2e8f0',
+                'strokeDashArray' => 4,
+            ],
+            'legend' => [
+                'fontSize' => '12px',
+                'labels' => ['colors' => '#64748b'],
+            ],
+            'xaxis' => [
+                'labels' => ['style' => ['colors' => '#64748b', 'fontSize' => '11px']],
+                'axisBorder' => ['show' => false],
+                'axisTicks' => ['show' => false],
+            ],
+            'yaxis' => [
+                'labels' => ['style' => ['colors' => '#64748b', 'fontSize' => '11px']],
+            ],
+            'tooltip' => ['theme' => 'light'],
+        ];
+    }
+
+    /**
+     * @param  list<array{label: string, value: float, meta?: string}>  $items
+     */
+    private function legacyHorizontalBarChart(array $items, array $options = []): string
     {
         $title = (string) ($options['title'] ?? '');
         $maxItems = (int) ($options['max_items'] ?? 8);
@@ -56,7 +427,7 @@ class ReportChartBuilder
     /**
      * @param  list<array{label: string, value: float}>  $items
      */
-    public function donutChart(array $items, array $options = []): string
+    private function legacyDonutChart(array $items, array $options = []): string
     {
         $title = (string) ($options['title'] ?? '');
         $centerLabel = (string) ($options['center_label'] ?? 'Всего');
@@ -100,14 +471,9 @@ class ReportChartBuilder
     /**
      * @param  list<array{label: string, current: float, previous?: float|null, suffix?: string}>  $metrics
      */
-    public function comparisonChart(array $metrics, array $options = []): string
+    private function legacyComparisonChart(array $metrics, array $options = []): string
     {
         $title = (string) ($options['title'] ?? 'Сравнение периодов');
-        $hasPrevious = collect($metrics)->contains(fn (array $m) => isset($m['previous']) && $m['previous'] !== null);
-        if (! $hasPrevious) {
-            return $this->kpiCards($metrics);
-        }
-
         $maxValue = 1.0;
         foreach ($metrics as $metric) {
             $maxValue = max($maxValue, (float) $metric['current'], (float) ($metric['previous'] ?? 0));
@@ -146,31 +512,9 @@ class ReportChartBuilder
     }
 
     /**
-     * @param  list<array{label: string, current: float, suffix?: string}>  $metrics
-     */
-    public function kpiCards(array $metrics): string
-    {
-        if ($metrics === []) {
-            return '';
-        }
-
-        $cards = '';
-        foreach ($metrics as $index => $metric) {
-            $color = self::COLORS[$index % count(self::COLORS)];
-            $suffix = (string) ($metric['suffix'] ?? '');
-            $cards .= '<td class="kpi-card" style="border-top: 3px solid '.$color.'">'
-                .'<div class="kpi-value">'.e($this->formatNumber((float) $metric['current']).$suffix).'</div>'
-                .'<div class="kpi-label">'.e((string) $metric['label']).'</div>'
-                .'</td>';
-        }
-
-        return '<table class="kpi-grid" width="100%"><tr>'.$cards.'</tr></table>';
-    }
-
-    /**
      * @param  list<array{label: string, primary: float, secondary?: float|null, primary_suffix?: string, secondary_suffix?: string}>  $items
      */
-    public function comboBarChart(array $items, array $options = []): string
+    private function legacyComboBarChart(array $items, array $options = []): string
     {
         $title = (string) ($options['title'] ?? '');
         $primaryLabel = (string) ($options['primary_label'] ?? '');
@@ -215,7 +559,7 @@ class ReportChartBuilder
     /**
      * @param  list<array{label: string, value: float}>  $points
      */
-    public function timeSeriesChart(array $points, array $options = []): string
+    private function legacyTimeSeriesChart(array $points, array $options = []): string
     {
         $title = (string) ($options['title'] ?? '');
         $valueSuffix = (string) ($options['value_suffix'] ?? '');
@@ -249,27 +593,6 @@ class ReportChartBuilder
         );
     }
 
-    /**
-     * @param  list<array{label: string, clicks: float, impressions: float, ctr: float}>  $rows
-     */
-    public function summaryCards(array $rows): string
-    {
-        if ($rows === []) {
-            return '';
-        }
-
-        $cards = '';
-        foreach ($rows as $index => $row) {
-            $color = self::COLORS[$index % count(self::COLORS)];
-            $cards .= '<td class="kpi-card" style="border-top: 3px solid '.$color.'">'
-                .'<div class="kpi-value">'.e((string) $row['value']).'</div>'
-                .'<div class="kpi-label">'.e((string) $row['label']).'</div>'
-                .'</td>';
-        }
-
-        return '<table class="kpi-grid" width="100%"><tr>'.$cards.'</tr></table>';
-    }
-
     private function barCell(int $widthPercent, string $color): string
     {
         $rest = max(0, 100 - $widthPercent);
@@ -283,6 +606,11 @@ class ReportChartBuilder
     private function wrapChart(string $html, string $class = ''): string
     {
         return '<div class="chart-box'.($class !== '' ? ' chart-'.$class : '').'">'.$html.'</div>';
+    }
+
+    private function nextChartId(): string
+    {
+        return 'report-chart-'.(++self::$globalChartSeq);
     }
 
     private function formatNumber(float $value): string

@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Integrations\Positions\KeysSoPositionProvider;
+use App\Integrations\Positions\TopvisorPositionProvider;
 use App\Models\ReportJob;
 use App\Models\ReportTemplate;
+use App\Services\PositionProviderRegistry;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -14,7 +17,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(PositionProviderRegistry::class, function ($app) {
+            return new PositionProviderRegistry([
+                $app->make(TopvisorPositionProvider::class),
+                $app->make(KeysSoPositionProvider::class),
+            ]);
+        });
     }
 
     /**

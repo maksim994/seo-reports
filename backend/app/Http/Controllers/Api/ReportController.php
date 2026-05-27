@@ -103,6 +103,22 @@ class ReportController extends Controller
         return response($contents, 200, ['Content-Type' => 'text/html; charset=UTF-8']);
     }
 
+    public function destroy(Request $request, ReportJob $reportJob): JsonResponse
+    {
+        $this->authorize('delete', $reportJob);
+
+        $disk = (string) config('reports.storage_disk', 'local');
+        $reportJob->load('files');
+
+        foreach ($reportJob->files as $file) {
+            Storage::disk($disk)->delete($file->path);
+        }
+
+        $reportJob->delete();
+
+        return response()->json(null, 204);
+    }
+
     public function download(Request $request, ReportJob $reportJob, string $format): StreamedResponse|JsonResponse
     {
         $this->authorize('view', $reportJob);

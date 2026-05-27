@@ -3,15 +3,24 @@
 namespace App\ReportBlocks\Renderers;
 
 use App\Contracts\MultiTypeBlockRendererInterface;
+use App\DataTransferObjects\PositionBinding;
 use App\Enums\IntegrationProvider;
+use App\Models\ProjectIntegration;
 use App\ReportBlocks\ReportBlockResult;
 use App\ReportBlocks\ReportRenderContext;
-use App\Services\TopvisorDataService;
+use App\Services\PositionProviderRegistry;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
 use Throwable;
 
 class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer implements MultiTypeBlockRendererInterface
 {
+    /** @var list<IntegrationProvider> */
+    private const POSITION_PROVIDERS = [
+        IntegrationProvider::Topvisor,
+        IntegrationProvider::KeysSo,
+    ];
+
     /** @var array<string, string> */
     private const TITLES = [
         'positions_visibility' => 'Позиции: видимость',
@@ -19,7 +28,7 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
         'positions_table' => 'Позиции: таблица ключей',
     ];
 
-    public function __construct(private TopvisorDataService $topvisor) {}
+    public function __construct(private PositionProviderRegistry $positions) {}
 
     public function type(): string
     {
@@ -40,59 +49,59 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
     {
         $title = self::TITLES[$blockType] ?? 'Позиции';
 
-        $resolved = $this->resolveBinding($context, IntegrationProvider::Topvisor);
+        $resolved = $this->resolvePositionContext($context);
         if (! $resolved) {
-            return $this->unavailable('Topvisor не привязан к проекту', $title);
+            return $this->unavailable('Не подключён провайдер позиций (Topvisor или Keys.so)', $title);
         }
 
-        [$token, $binding] = $resolved;
+        [$providerEnum, $binding] = $resolved;
         $credentials = $binding->integration?->credentials ?? [];
+        $apiKey = (string) ($credentials['api_key'] ?? $credentials['api_token'] ?? $credentials['access_token'] ?? '');
         $userId = (string) ($credentials['user_id'] ?? '');
-        $apiKey = (string) ($credentials['api_key'] ?? $token);
 
-        if ($userId === '' || $apiKey === '') {
-            return $this->unavailable('API-ключ Topvisor не указан', $title);
+        if ($apiKey === '') {
+            return $this->unavailable('API-ключ провайдера позиций не указан', $title);
+        }
+
+        if ($providerEnum === IntegrationProvider::Topvisor && $userId === '') {
+            return $this->unavailable('User ID Topvisor не указан', $title);
         }
 
         $resourceId = $binding->external_resource_id;
         if (! $resourceId) {
-            return $this->unavailable('Проект Topvisor не выбран', $title);
+            return $this->unavailable('Проект мониторинга не выбран', $title);
         }
 
         try {
-            $parsed = $this->topvisor->parseBindingResourceId($resourceId);
+            $positionBinding = new PositionBinding(
+                $userId,
+                $apiKey,
+                $resourceId,
+                $binding->external_resource_label,
+                $binding->config,
+            );
+
+            $provider = $this->positions->get($providerEnum);
             $periods = $this->periodDates($context);
             [$from, $to] = $periods['current'];
 
-            $summary = $this->topvisor->fetchSummary(
-                $userId,
-                $apiKey,
-                $parsed['project_id'],
-                $parsed['region_index'],
-                $from,
-                $to,
-            );
+            $summary = $provider->fetchSummary($positionBinding, $from, $to);
 
             $previousSummary = null;
             if ($periods['previous']) {
-                $previousSummary = $this->topvisor->fetchSummary(
-                    $userId,
-                    $apiKey,
-                    $parsed['project_id'],
-                    $parsed['region_index'],
+                $previousSummary = $provider->fetchSummary(
+                    $positionBinding,
                     $periods['previous'][0],
                     $periods['previous'][1],
                 );
             }
 
             $rows = $blockType === 'positions_table'
-                ? $this->topvisor->fetchPositionsTable(
-                    $userId,
-                    $apiKey,
-                    $parsed['project_id'],
-                    $parsed['region_index'],
+                ? $provider->fetchPositionsTable(
+                    $positionBinding,
                     $from,
                     $to,
+                    max(1, min(200, (int) ($settings['limit'] ?? 50))),
                 )
                 : [];
 
@@ -111,9 +120,30 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
             ])->render();
 
             return new ReportBlockResult($html, $title);
-        } catch (Throwable) {
-            return $this->unavailable('Данные Topvisor временно недоступны', $title);
+        } catch (Throwable $e) {
+            Log::warning('Report block data fetch failed', [
+                'block' => $title,
+                'provider' => $providerEnum->value,
+                'message' => $e->getMessage(),
+            ]);
+
+            $providerLabel = $providerEnum->label();
+
+            return $this->unavailable("Данные {$providerLabel} временно недоступны", $title);
         }
+    }
+
+    /** @return array{0: IntegrationProvider, 1: ProjectIntegration}|null */
+    private function resolvePositionContext(ReportRenderContext $context): ?array
+    {
+        foreach (self::POSITION_PROVIDERS as $provider) {
+            $resolved = $this->resolveBinding($context, $provider);
+            if ($resolved) {
+                return [$provider, $resolved[1]];
+            }
+        }
+
+        return null;
     }
 
     protected function blockTitle(): string

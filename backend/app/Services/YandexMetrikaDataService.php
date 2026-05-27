@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\ReportFetch;
 use App\Models\ProjectIntegration;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -15,20 +16,27 @@ class YandexMetrikaDataService
         string $dateFrom,
         string $dateTo,
     ): ?array {
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get('https://api-metrika.yandex.net/stat/v1/data', [
-            'ids' => $counterId,
-            'metrics' => 'ym:s:visits,ym:s:users,ym:s:bounceRate,ym:s:avgVisitDurationSeconds',
-            'date1' => $dateFrom,
-            'date2' => $dateTo,
-        ]);
+        $payload = ReportFetch::remember(
+            'metrika.overview.'.sha1($accessToken.'|'.$counterId.'|'.$dateFrom.'|'.$dateTo),
+            function () use ($accessToken, $counterId, $dateFrom, $dateTo) {
+                $response = Http::withHeaders([
+                    'Authorization' => 'OAuth '.$accessToken,
+                ])->get('https://api-metrika.yandex.net/stat/v1/data', [
+                    'ids' => $counterId,
+                    'metrics' => 'ym:s:visits,ym:s:users,ym:s:bounceRate,ym:s:avgVisitDurationSeconds',
+                    'date1' => $dateFrom,
+                    'date2' => $dateTo,
+                ]);
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Metrika API error: '.$response->body());
-        }
+                if (! $response->successful()) {
+                    throw new RuntimeException('Metrika API error: '.$response->body());
+                }
 
-        $totals = $response->json('totals');
+                return $response->json();
+            },
+        );
+
+        $totals = $payload['totals'] ?? null;
         if (! is_array($totals) || count($totals) < 4) {
             return null;
         }
@@ -58,39 +66,19 @@ class YandexMetrikaDataService
         string $dateTo,
         int $limit = 10,
     ): array {
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get('https://api-metrika.yandex.net/stat/v1/data', [
-            'ids' => $counterId,
-            'dimensions' => 'ym:s:lastTrafficSource',
-            'metrics' => 'ym:s:visits,ym:s:users',
-            'date1' => $dateFrom,
-            'date2' => $dateTo,
-            'sort' => '-ym:s:visits',
-            'limit' => $limit,
-            'lang' => 'ru',
-        ]);
-
-        if (! $response->successful()) {
-            throw new RuntimeException('Metrika API error: '.$response->body());
-        }
-
-        return collect($response->json('data') ?? [])
-            ->map(function (array $row) {
-                $dims = $row['dimensions'] ?? [];
-                $metrics = $row['metrics'] ?? [];
-
-                return [
-                    'label' => $this->translateTrafficSource(
-                        isset($dims[0]['id']) ? (string) $dims[0]['id'] : null,
-                        isset($dims[0]['name']) ? (string) $dims[0]['name'] : null,
-                    ),
-                    'visits' => (float) ($metrics[0] ?? 0),
-                    'users' => (float) ($metrics[1] ?? 0),
-                ];
-            })
-            ->values()
-            ->all();
+        return $this->mapDimensionRows(
+            $this->statRequest($accessToken, [
+                'ids' => $counterId,
+                'dimensions' => 'ym:s:lastTrafficSource',
+                'metrics' => 'ym:s:visits,ym:s:users',
+                'date1' => $dateFrom,
+                'date2' => $dateTo,
+                'sort' => '-ym:s:visits',
+                'limit' => $limit,
+            ]),
+            fn (?string $id, ?string $name) => $this->translateTrafficSource($id, $name),
+            ['visits', 'users'],
+        );
     }
 
     private function translateTrafficSource(?string $id, ?string $name): string
@@ -157,20 +145,27 @@ class YandexMetrikaDataService
                 $metrics[] = "ym:s:goal{$goal['id']}conversionRate";
             }
 
-            $response = Http::withHeaders([
-                'Authorization' => 'OAuth '.$accessToken,
-            ])->get('https://api-metrika.yandex.net/stat/v1/data', [
-                'ids' => $counterId,
-                'metrics' => implode(',', $metrics),
-                'date1' => $dateFrom,
-                'date2' => $dateTo,
-            ]);
+            $payload = ReportFetch::remember(
+                'metrika.goals.metrics.'.sha1($accessToken.'|'.$counterId.'|'.$dateFrom.'|'.$dateTo.'|'.implode(',', array_column($chunk, 'id'))),
+                function () use ($accessToken, $counterId, $dateFrom, $dateTo, $metrics) {
+                    $response = Http::withHeaders([
+                        'Authorization' => 'OAuth '.$accessToken,
+                    ])->get('https://api-metrika.yandex.net/stat/v1/data', [
+                        'ids' => $counterId,
+                        'metrics' => implode(',', $metrics),
+                        'date1' => $dateFrom,
+                        'date2' => $dateTo,
+                    ]);
 
-            if (! $response->successful()) {
-                throw new RuntimeException('Metrika API error: '.$response->body());
-            }
+                    if (! $response->successful()) {
+                        throw new RuntimeException('Metrika API error: '.$response->body());
+                    }
 
-            $totals = $response->json('totals') ?? [];
+                    return $response->json();
+                },
+            );
+
+            $totals = $payload['totals'] ?? [];
             foreach ($chunk as $index => $goal) {
                 $rows[] = [
                     'label' => $goal['name'],
@@ -190,22 +185,27 @@ class YandexMetrikaDataService
     /** @return list<array{id: int, name: string}> */
     private function listActiveGoals(string $accessToken, string $counterId): array
     {
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get("https://api-metrika.yandex.net/management/v1/counter/{$counterId}/goals");
+        return ReportFetch::remember(
+            'metrika.goals.list.'.sha1($accessToken.'|'.$counterId),
+            function () use ($accessToken, $counterId) {
+                $response = Http::withHeaders([
+                    'Authorization' => 'OAuth '.$accessToken,
+                ])->get("https://api-metrika.yandex.net/management/v1/counter/{$counterId}/goals");
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Metrika goals API error: '.$response->body());
-        }
+                if (! $response->successful()) {
+                    throw new RuntimeException('Metrika goals API error: '.$response->body());
+                }
 
-        return collect($response->json('goals') ?? [])
-            ->filter(fn (array $goal) => ($goal['status'] ?? '') === 'Active')
-            ->map(fn (array $goal) => [
-                'id' => (int) $goal['id'],
-                'name' => (string) ($goal['name'] ?? $goal['id']),
-            ])
-            ->values()
-            ->all();
+                return collect($response->json('goals') ?? [])
+                    ->filter(fn (array $goal) => ($goal['status'] ?? '') === 'Active')
+                    ->map(fn (array $goal) => [
+                        'id' => (int) $goal['id'],
+                        'name' => (string) ($goal['name'] ?? $goal['id']),
+                    ])
+                    ->values()
+                    ->all();
+            },
+        );
     }
 
     /** @return list<array{label: string, visits: float, users: float}> */
@@ -402,7 +402,7 @@ class YandexMetrikaDataService
         return collect($this->statRequest($accessToken, [
             'ids' => $counterId,
             'dimensions' => 'ym:s:lastTrafficSource',
-            'metrics' => 'ym:s:sumGoalReachesAny,ym:s:visits,ym:s:goalConversionRateAny',
+            'metrics' => 'ym:s:sumGoalReachesAny,ym:s:visits',
             'date1' => $dateFrom,
             'date2' => $dateTo,
             'sort' => '-ym:s:sumGoalReachesAny',
@@ -411,15 +411,17 @@ class YandexMetrikaDataService
             ->map(function (array $row) {
                 $dims = $row['dimensions'] ?? [];
                 $metrics = $row['metrics'] ?? [];
+                $conversions = (float) ($metrics[0] ?? 0);
+                $visits = (float) ($metrics[1] ?? 0);
 
                 return [
                     'label' => $this->translateTrafficSource(
                         isset($dims[0]['id']) ? (string) $dims[0]['id'] : null,
                         isset($dims[0]['name']) ? (string) $dims[0]['name'] : null,
                     ),
-                    'conversions' => (float) ($metrics[0] ?? 0),
-                    'visits' => (float) ($metrics[1] ?? 0),
-                    'conversion_rate' => (float) ($metrics[2] ?? 0),
+                    'conversions' => $conversions,
+                    'visits' => $visits,
+                    'conversion_rate' => $visits > 0 ? ($conversions / $visits) * 100 : 0.0,
                 ];
             })
             ->values()
@@ -475,17 +477,37 @@ class YandexMetrikaDataService
     /** @return array<string, mixed> */
     private function statRequest(string $accessToken, array $params): array
     {
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get('https://api-metrika.yandex.net/stat/v1/data', array_merge([
-            'lang' => 'ru',
-        ], $params));
+        return ReportFetch::remember(
+            'metrika.stat.'.sha1($accessToken.'|'.json_encode($params)),
+            function () use ($accessToken, $params) {
+                $lastBody = null;
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Metrika API error: '.$response->body());
-        }
+                for ($attempt = 0; $attempt < 3; $attempt++) {
+                    if ($attempt > 0) {
+                        usleep(400000 * $attempt);
+                    }
 
-        return $response->json();
+                    $response = Http::withHeaders([
+                        'Authorization' => 'OAuth '.$accessToken,
+                    ])->get('https://api-metrika.yandex.net/stat/v1/data', array_merge([
+                        'lang' => 'ru',
+                    ], $params));
+
+                    if ($response->status() === 429) {
+                        $lastBody = $response->body();
+                        continue;
+                    }
+
+                    if (! $response->successful()) {
+                        throw new RuntimeException('Metrika API error: '.$response->body());
+                    }
+
+                    return $response->json();
+                }
+
+                throw new RuntimeException('Metrika API error: '.($lastBody ?: 'rate limit exceeded'));
+            },
+        );
     }
 
     private function translateDevice(?string $id, ?string $name): string

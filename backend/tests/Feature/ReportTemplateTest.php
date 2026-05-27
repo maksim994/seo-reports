@@ -81,4 +81,32 @@ class ReportTemplateTest extends TestCase
                 ],
             ]);
     }
+
+    public function test_user_can_upload_and_delete_template_logo(): void
+    {
+        $user = User::factory()->create();
+
+        $create = $this->actingAs($user)->postJson('/api/templates', [
+            'name' => 'Logo Template',
+            'blocks' => [['block_type' => 'title_page']],
+        ])->assertCreated();
+
+        $id = $create->json('data.id');
+
+        $this->actingAs($user)
+            ->postJson("/api/templates/{$id}/logo", [
+                'logo' => \Illuminate\Http\UploadedFile::fake()->image('logo.png', 200, 80),
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.logo_url', fn ($url) => str_contains($url, "/api/templates/{$id}/logo"));
+
+        $this->actingAs($user)
+            ->get("/api/templates/{$id}/logo")
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->deleteJson("/api/templates/{$id}/logo")
+            ->assertOk()
+            ->assertJsonPath('data.logo_url', null);
+    }
 }

@@ -7,6 +7,7 @@ use App\Models\ReportFile;
 use App\Models\ReportJob;
 use App\ReportBlocks\ReportBlockRegistry;
 use App\ReportBlocks\ReportRenderContext;
+use App\Services\ReportFetchCache;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\View;
@@ -28,6 +29,8 @@ class ReportGeneratorService
         ]);
 
         try {
+            app()->instance(ReportFetchCache::class, new ReportFetchCache());
+
             $job->load([
                 'project.projectIntegrations.integration',
                 'template.blocks',
@@ -47,17 +50,11 @@ class ReportGeneratorService
 
             $job->update(['status' => ReportJobStatus::Rendering]);
 
-            $sections = [];
-            foreach ($job->template->blocks as $index => $block) {
-                $result = $this->registry->render($block->block_type, $context, $block->settings);
-                $sections[] = [
-                    'anchor' => 'block-'.$index,
-                    'html' => $result->html,
-                ];
-            }
+            $htmlSections = $this->renderSections($job, $context, false);
+            $pdfSections = $this->renderSections($job, $context, true);
 
             $html = View::make('reports.document', [
-                'sections' => $sections,
+                'sections' => $htmlSections,
                 'job' => $job,
                 'project' => $job->project,
                 'template' => $job->template,
@@ -70,7 +67,7 @@ class ReportGeneratorService
             $this->storeFile($job, $disk, $basePath.'/report.html', 'html', $html);
 
             $pdfHtml = View::make('reports.document', [
-                'sections' => $sections,
+                'sections' => $pdfSections,
                 'job' => $job,
                 'project' => $job->project,
                 'template' => $job->template,
@@ -100,7 +97,30 @@ class ReportGeneratorService
             ]);
 
             throw $e;
+        } finally {
+            if (app()->bound(ReportFetchCache::class)) {
+                app()->forgetInstance(ReportFetchCache::class);
+            }
         }
+    }
+
+    /**
+     * @return list<array{anchor: string, html: string}>
+     */
+    private function renderSections(ReportJob $job, ReportRenderContext $context, bool $forPdf): array
+    {
+        View::share('forPdf', $forPdf);
+
+        $sections = [];
+        foreach ($job->template->blocks as $index => $block) {
+            $result = $this->registry->render($block->block_type, $context, $block->settings);
+            $sections[] = [
+                'anchor' => 'block-'.$index,
+                'html' => $result->html,
+            ];
+        }
+
+        return $sections;
     }
 
     private function storeFile(ReportJob $job, string $disk, string $path, string $format, string $contents): void

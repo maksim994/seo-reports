@@ -69,7 +69,7 @@ AWS_USE_PATH_STYLE_ENDPOINT=true
 
 ## Environment Variables
 
-Задаются в Coolify UI (Secrets). Полный список — `backend/.env.example`.
+Задаются в Coolify UI (Secrets). Шаблон — `backend/.env.production.example`.
 
 **Обязательные для prod:**
 
@@ -77,7 +77,12 @@ AWS_USE_PATH_STYLE_ENDPOINT=true
 APP_ENV=production
 APP_DEBUG=false
 APP_URL=https://app.example.com
-APP_KEY=                    # php artisan key:generate
+FRONTEND_URL=https://app.example.com
+APP_KEY=                    # php artisan key:generate --show
+
+SESSION_DOMAIN=.example.com
+SESSION_SECURE_COOKIE=true
+SANCTUM_STATEFUL_DOMAINS=app.example.com
 
 DB_CONNECTION=pgsql
 DB_HOST=
@@ -90,12 +95,14 @@ REDIS_HOST=
 REDIS_PASSWORD=
 
 QUEUE_CONNECTION=redis
+FILESYSTEM_DISK=s3
+TEMPLATE_LOGO_DISK=s3
 
 # OAuth
-YANDEX_CLIENT_ID=
-YANDEX_CLIENT_SECRET=
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
+YANDEX_OAUTH_CLIENT_ID=
+YANDEX_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
 
 # Mail
 MAIL_MAILER=smtp
@@ -109,9 +116,11 @@ MAIL_PASSWORD=
 
 1. Push в `main` → Coolify webhook (auto-deploy) или manual trigger
 2. Coolify build: `docker build -f docker/Dockerfile --target production`
-3. Frontend собирается внутри Dockerfile (npm run build)
-4. Миграции: post-deploy command `php artisan migrate --force`
-5. Health check проходит → traffic switch
+3. Frontend собирается внутри Dockerfile (`npm run build`), nginx отдаёт статику из `/var/www/frontend`
+4. Web-сервис: порт **80**, default CMD запускает nginx + php-fpm
+5. Worker / Scheduler: override start command (см. выше)
+6. Миграции: post-deploy command `php artisan migrate --force`
+7. Health check `GET /api/health` проходит → traffic switch
 
 ## Post-deploy commands
 

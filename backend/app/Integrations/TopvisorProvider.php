@@ -41,12 +41,10 @@ class TopvisorProvider implements ApiKeyIntegrationProviderInterface
     public function connectWithApiKey(User $user, string $userId, string $apiKey): array
     {
         $projects = $this->topvisor->listProjects($userId, $apiKey);
-        $label = count($projects) > 0
-            ? 'Topvisor · '.$projects[0]['name']
-            : 'Topvisor · User '.$userId;
+        $count = count($projects);
 
         return [
-            'account_label' => $label,
+            'account_label' => 'Topvisor · User '.$userId.($count > 0 ? " · {$count} проект(ов)" : ''),
             'credentials' => [
                 'user_id' => $userId,
                 'api_key' => $apiKey,
@@ -54,6 +52,11 @@ class TopvisorProvider implements ApiKeyIntegrationProviderInterface
             ],
             'expires_at' => null,
         ];
+    }
+
+    public function apiKeyFields(): array
+    {
+        return ['user_id', 'api_key'];
     }
 
     public function listResources(Integration $integration): array
@@ -66,6 +69,6 @@ class TopvisorProvider implements ApiKeyIntegrationProviderInterface
             throw new RuntimeException('Topvisor credentials are incomplete.');
         }
 
-        return $this->topvisor->listBindableResources($userId, $apiKey);
+        return $this->topvisor->listProjectResources($userId, $apiKey);
     }
 }

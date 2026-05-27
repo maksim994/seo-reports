@@ -20,6 +20,7 @@ class TitlePageBlockRenderer implements ReportBlockRendererInterface
             'project' => $context->project,
             'job' => $context->job,
             'template' => $context->template,
+            'logoDataUri' => $context->template->logoDataUri(),
         ])->render();
 
         return new ReportBlockResult($html, 'Титульная страница');

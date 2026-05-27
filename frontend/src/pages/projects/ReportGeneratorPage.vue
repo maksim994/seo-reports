@@ -133,20 +133,29 @@
                 </p>
               </div>
 
-              <div v-if="job.status === 'done'" class="flex flex-wrap gap-2">
-                <a
-                  :href="reportsStore.previewUrl(job.id)"
-                  target="_blank"
-                  class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+              <div class="flex flex-wrap items-center gap-2">
+                <template v-if="job.status === 'done'">
+                  <a
+                    :href="reportsStore.previewUrl(job.id)"
+                    target="_blank"
+                    class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  >
+                    HTML
+                  </a>
+                  <a
+                    :href="reportsStore.downloadUrl(job.id, 'pdf')"
+                    class="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600"
+                  >
+                    PDF
+                  </a>
+                </template>
+                <button
+                  class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-error-500 hover:bg-red-50 disabled:opacity-50"
+                  :disabled="deletingId === job.id"
+                  @click="removeJob(job.id)"
                 >
-                  HTML
-                </a>
-                <a
-                  :href="reportsStore.downloadUrl(job.id, 'pdf')"
-                  class="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600"
-                >
-                  PDF
-                </a>
+                  {{ deletingId === job.id ? 'Удаление...' : 'Удалить' }}
+                </button>
               </div>
             </div>
           </article>
@@ -177,6 +186,7 @@ const recentJobs = ref<ReportJob[]>([])
 const generating = ref(false)
 const error = ref('')
 const compareEnabled = ref(false)
+const deletingId = ref<number | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const form = reactive({
@@ -277,6 +287,20 @@ function upsertRecentJob(job: ReportJob) {
     recentJobs.value[index] = job
   } else {
     recentJobs.value = [job, ...recentJobs.value].slice(0, 10)
+  }
+}
+
+async function removeJob(id: number) {
+  if (!confirm('Удалить отчёт?')) return
+  deletingId.value = id
+  try {
+    await reportsStore.deleteReport(id)
+    recentJobs.value = recentJobs.value.filter((job) => job.id !== id)
+    if (pollTimer) {
+      stopPolling()
+    }
+  } finally {
+    deletingId.value = null
   }
 }
 

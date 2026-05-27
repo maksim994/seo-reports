@@ -8,4 +8,7 @@ interface ApiKeyIntegrationProviderInterface extends IntegrationProviderInterfac
 {
     /** @return array{account_label: string, credentials: array<string, mixed>, expires_at: ?\DateTimeInterface} */
     public function connectWithApiKey(User $user, string $userId, string $apiKey): array;
+
+    /** @return list<'user_id'|'api_key'> */
+    public function apiKeyFields(): array;
 }

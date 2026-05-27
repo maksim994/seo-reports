@@ -2,13 +2,16 @@
 
 namespace App\Services;
 
+use App\Contracts\ApiKeyIntegrationProviderInterface;
 use App\Contracts\IntegrationProviderInterface;
 use App\Enums\IntegrationProvider;
 use App\Integrations\GoogleAnalyticsProvider;
 use App\Integrations\GoogleSearchConsoleProvider;
+use App\Integrations\KeysSoProvider;
 use App\Integrations\TopvisorProvider;
 use App\Integrations\YandexMetrikaProvider;
 use App\Integrations\YandexWebmasterProvider;
+use App\Services\KeysSoDataService;
 use App\Services\TopvisorDataService;
 use InvalidArgumentException;
 
@@ -33,6 +36,7 @@ class IntegrationManager
             new YandexWebmasterProvider,
             new GoogleSearchConsoleProvider,
             new TopvisorProvider(app(TopvisorDataService::class)),
+            new KeysSoProvider(app(KeysSoDataService::class)),
         ];
     }
 
@@ -47,7 +51,7 @@ class IntegrationManager
         return $this->providers[$key];
     }
 
-    /** @return list<array{provider: string, label: string, description: string, icon: string, configured: bool, auth_type: string}> */
+    /** @return list<array{provider: string, label: string, description: string, icon: string, logo_url: string|null, configured: bool, auth_type: string, api_key_fields: list<string>}> */
     public function catalog(): array
     {
         return array_map(function (IntegrationProviderInterface $impl) {
@@ -58,8 +62,12 @@ class IntegrationManager
                 'label' => $provider->label(),
                 'description' => $provider->description(),
                 'icon' => $provider->icon(),
+                'logo_url' => config('integrations.logos.'.$provider->value),
                 'configured' => $impl->isConfigured(),
                 'auth_type' => $impl->authType(),
+                'api_key_fields' => $impl instanceof ApiKeyIntegrationProviderInterface
+                    ? $impl->apiKeyFields()
+                    : [],
             ];
         }, array_values($this->providers));
     }

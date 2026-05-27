@@ -15,14 +15,20 @@
         :key="integration.id"
         class="rounded-xl border border-gray-200 p-4"
       >
-        <div class="mb-3 flex items-center justify-between gap-2">
-          <div>
+        <div class="mb-3 flex items-center gap-3">
+          <IntegrationLogo
+            :provider="integration.provider"
+            :label="integration.label"
+            :logo-url="integration.logo_url"
+            size="sm"
+          />
+          <div class="min-w-0 flex-1">
             <div class="font-medium text-gray-900">{{ integration.label }}</div>
             <div class="text-xs text-gray-500">{{ integration.account_label }}</div>
           </div>
           <span
             v-if="currentBinding(integration.id)"
-            class="rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700"
+            class="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-xs text-green-700"
           >
             Привязано
           </span>
@@ -41,14 +47,43 @@
           <select
             v-model="selectedResource[integration.id]"
             class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+            @change="onResourceChange(integration)"
           >
-            <option value="">— выберите ресурс —</option>
+            <option value="">{{ resourceSelectPlaceholder(integration) }}</option>
             <option
-              v-for="resource in resources[integration.id]"
+              v-for="resource in bindableResources(integration)"
               :key="resource.id"
               :value="resource.id"
             >
               {{ formatResourceOption(resource) }}
+            </option>
+          </select>
+          <select
+            v-if="integration.provider === 'topvisor' && topvisorRegionsFor(integration.id).length"
+            v-model="selectedRegion[integration.id]"
+            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+          >
+            <option value="">— регион для отчёта (по умолчанию Яндекс) —</option>
+            <option
+              v-for="region in topvisorRegionsFor(integration.id)"
+              :key="region.index"
+              :value="String(region.index)"
+            >
+              {{ formatTopvisorRegionOption(region) }}
+            </option>
+          </select>
+          <select
+            v-if="integration.provider === 'keys_so' && keysSoSettingsFor(integration.id).length"
+            v-model="selectedKeysSoSetting[integration.id]"
+            class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+          >
+            <option value="">— регион и ПС (по умолчанию Яндекс) —</option>
+            <option
+              v-for="setting in keysSoSettingsFor(integration.id)"
+              :key="`${setting.region_id}:${setting.engine}`"
+              :value="`${setting.region_id}:${setting.engine}`"
+            >
+              {{ formatKeysSoSearchSettingOption(setting) }}
             </option>
           </select>
           <div class="flex gap-2">
@@ -87,6 +122,8 @@
 import { reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppModal from '@/components/AppModal.vue'
+import IntegrationLogo from '@/components/IntegrationLogo.vue'
+import { formatIntegrationResourceOption, formatKeysSoSearchSettingOption, formatTopvisorRegionOption, keysSoSearchSettings, topvisorRegions } from '@/lib/integrationResource'
 import { useIntegrationsStore } from '@/stores/integrations'
 import { useProjectIntegrationsStore } from '@/stores/projectIntegrations'
 import type { Integration, IntegrationResource } from '@/types'
@@ -115,6 +152,8 @@ const resources = reactive<Record<number, IntegrationResource[]>>({})
 const resourcesLoading = reactive<Record<number, boolean>>({})
 const resourcesError = reactive<Record<number, string>>({})
 const selectedResource = reactive<Record<number, string>>({})
+const selectedRegion = reactive<Record<number, string>>({})
+const selectedKeysSoSetting = reactive<Record<number, string>>({})
 
 function currentBinding(integrationId: number) {
   return bindingsStore.bindings.find((b) => b.integration_id === integrationId)
@@ -130,11 +169,59 @@ function normalizeDomain(value: string): string {
 }
 
 function formatResourceOption(resource: IntegrationResource): string {
-  if (resource.label?.trim()) {
-    return resource.label
+  return formatIntegrationResourceOption(resource)
+}
+
+function bindableResources(integration: Integration) {
+  const list = resources[integration.id] ?? []
+  if (integration.provider === 'keys_so') {
+    return list.filter((resource) => resource.meta?.supports_positions !== false)
   }
-  const counterId = resource.meta?.counter_id
-  return counterId ? `#${counterId}` : resource.id
+
+  return list
+}
+
+function topvisorRegionsFor(integrationId: number) {
+  const resourceId = selectedResource[integrationId]
+  if (!resourceId) return []
+  const resource = (resources[integrationId] ?? []).find((item) => item.id === resourceId)
+  return resource ? topvisorRegions(resource) : []
+}
+
+function keysSoSettingsFor(integrationId: number) {
+  const resourceId = selectedResource[integrationId]
+  if (!resourceId) return []
+  const resource = (resources[integrationId] ?? []).find((item) => item.id === resourceId)
+  return resource ? keysSoSearchSettings(resource) : []
+}
+
+function resourceSelectPlaceholder(integration: Integration) {
+  if (integration.provider === 'topvisor') return '— выберите проект Topvisor —'
+  if (integration.provider === 'keys_so') return '— выберите проект Keys.so —'
+  return '— выберите ресурс —'
+}
+
+function onResourceChange(integration: Integration) {
+  selectedRegion[integration.id] = ''
+  selectedKeysSoSetting[integration.id] = ''
+  suggestRegion(integration.id)
+  suggestKeysSoSetting(integration.id)
+}
+
+function suggestRegion(integrationId: number) {
+  const binding = currentBinding(integrationId)
+  if (binding?.config && typeof binding.config.region_index === 'number') {
+    selectedRegion[integrationId] = String(binding.config.region_index)
+    return
+  }
+
+  const regions = topvisorRegionsFor(integrationId)
+  const yandex = regions.find((region) =>
+    /yandex|яндекс/i.test(region.searcher),
+  )
+  if (yandex) {
+    selectedRegion[integrationId] = String(yandex.index)
+  }
 }
 
 function resourceMatchesDomain(domain: string | null, resource: IntegrationResource): boolean {
@@ -150,10 +237,27 @@ function resourceMatchesDomain(domain: string | null, resource: IntegrationResou
   return candidates.some((c) => c && (c.includes(norm) || norm.includes(c)))
 }
 
+function suggestKeysSoSetting(integrationId: number) {
+  const binding = currentBinding(integrationId)
+  if (binding?.config && typeof binding.config.region_id === 'number') {
+    const engine = typeof binding.config.engine === 'number' ? binding.config.engine : 0
+    selectedKeysSoSetting[integrationId] = `${binding.config.region_id}:${engine}`
+    return
+  }
+
+  const settings = keysSoSettingsFor(integrationId)
+  const yandex = settings.find((setting) => setting.engine === 0)
+  if (yandex) {
+    selectedKeysSoSetting[integrationId] = `${yandex.region_id}:${yandex.engine}`
+  }
+}
+
 function suggestResource(integrationId: number) {
   const binding = currentBinding(integrationId)
   if (binding) {
     selectedResource[integrationId] = binding.external_resource_id
+    suggestRegion(integrationId)
+    suggestKeysSoSetting(integrationId)
     return
   }
 
@@ -161,6 +265,8 @@ function suggestResource(integrationId: number) {
   const match = list.find((r) => resourceMatchesDomain(props.projectDomain, r))
   if (match) {
     selectedResource[integrationId] = match.id
+    suggestRegion(integrationId)
+    suggestKeysSoSetting(integrationId)
   }
 }
 
@@ -203,10 +309,24 @@ async function save(integration: Integration) {
 
   saving.value = integration.id
   try {
+    const config =
+      integration.provider === 'topvisor' && selectedRegion[integration.id]
+        ? { region_index: Number(selectedRegion[integration.id]) }
+        : integration.provider === 'keys_so' && selectedKeysSoSetting[integration.id]
+          ? (() => {
+              const [regionId, engine] = selectedKeysSoSetting[integration.id].split(':')
+              return {
+                region_id: Number(regionId),
+                engine: Number(engine),
+              }
+            })()
+          : undefined
+
     await bindingsStore.bind(props.projectId, {
       integration_id: integration.id,
       external_resource_id: selectedResource[integration.id],
       external_resource_label: resource?.label ?? null,
+      config,
     })
     emit('saved')
   } finally {

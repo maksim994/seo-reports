@@ -7,7 +7,9 @@ use App\Enums\IntegrationProvider;
 use App\Models\ProjectIntegration;
 use App\ReportBlocks\ReportBlockResult;
 use App\ReportBlocks\ReportRenderContext;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
+use Throwable;
 
 abstract class AbstractIntegrationBlockRenderer implements ReportBlockRendererInterface
 {
@@ -36,6 +38,16 @@ abstract class AbstractIntegrationBlockRenderer implements ReportBlockRendererIn
         ])->render();
 
         return new ReportBlockResult($html, $title, success: false);
+    }
+
+    protected function unavailableFromThrowable(Throwable $exception, string $message, ?string $title = null): ReportBlockResult
+    {
+        Log::warning('Report block data fetch failed', [
+            'block' => $title ?? $this->blockTitle(),
+            'message' => $exception->getMessage(),
+        ]);
+
+        return $this->unavailable($message, $title);
     }
 
     protected function periodDates(ReportRenderContext $context): array

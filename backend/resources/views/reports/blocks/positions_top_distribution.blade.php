@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $tops = $summary['tops'] ?? [];
     $chartItems = collect([
         ['label' => 'TOP-3', 'value' => (float) ($tops['top3'] ?? 0)],

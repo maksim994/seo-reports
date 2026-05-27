@@ -138,4 +138,86 @@ class Phase15BlocksTest extends TestCase
             'provider' => IntegrationProvider::Topvisor->value,
         ]);
     }
+
+    public function test_keys_so_api_key_connect_creates_integration(): void
+    {
+        Http::fake([
+            'api.keys.so/monitoring*' => Http::response([
+                'current_page' => 1,
+                'last_page' => 1,
+                'data' => [
+                    ['id' => 146, 'name' => 'Demo', 'trackingItem' => 'demo.ru', 'search_settings' => []],
+                ],
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson('/api/integrations/keys_so/api-key', [
+                'api_key' => 'keysso-token',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('integrations', [
+            'user_id' => $user->id,
+            'provider' => IntegrationProvider::KeysSo->value,
+        ]);
+    }
+
+    public function test_positions_visibility_block_renders_with_keys_so(): void
+    {
+        Http::fake([
+            'api.keys.so/monitoring/146/report-chart*' => Http::response([
+                'data' => [
+                    '2026-04-30' => [
+                        'it3_organic' => 1,
+                        'it10_organic' => 4,
+                        'it50_organic' => 6,
+                        'it100_organic' => 8,
+                        'total_words' => 10,
+                        'day_avg_organic_pos' => 11.2,
+                    ],
+                ],
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+        $project = Project::factory()->for($user)->create();
+        $integration = Integration::create([
+            'user_id' => $user->id,
+            'provider' => IntegrationProvider::KeysSo,
+            'credentials' => ['api_token' => 'secret', 'access_token' => 'secret'],
+            'status' => 'active',
+        ]);
+        $binding = $project->projectIntegrations()->create([
+            'integration_id' => $integration->id,
+            'external_resource_id' => '146',
+            'external_resource_label' => 'Demo · #146',
+            'config' => ['region_id' => 38, 'engine' => 0],
+        ])->load('integration');
+
+        $template = ReportTemplate::create(['user_id' => $user->id, 'name' => 'Tpl']);
+        $job = \App\Models\ReportJob::create([
+            'user_id' => $user->id,
+            'project_id' => $project->id,
+            'report_template_id' => $template->id,
+            'status' => ReportJobStatus::Queued,
+            'period_start' => '2026-04-01',
+            'period_end' => '2026-04-30',
+        ]);
+
+        $context = new ReportRenderContext(
+            $project,
+            $template,
+            $job,
+            collect([$binding])->keyBy(fn ($b) => $b->integration->provider->value),
+            app(ReportBlockCatalog::class),
+        );
+
+        $result = app(ReportBlockRegistry::class)->render('positions_visibility', $context, null);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('40.0', $result->html);
+    }
 }

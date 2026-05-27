@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $cards = $summary && $summary['visibility'] !== null ? $charts->summaryCards([
         ['label' => 'Видимость', 'value' => number_format($summary['visibility'], 1, '.', ' ')],
         ['label' => 'Средняя позиция', 'value' => $summary['avg'] !== null ? number_format($summary['avg'], 1, '.', ' ') : '—'],

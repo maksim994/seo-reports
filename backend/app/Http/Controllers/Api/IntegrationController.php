@@ -78,15 +78,21 @@ class IntegrationController extends Controller
             return response()->json(['message' => 'This provider does not support API key auth.'], 422);
         }
 
-        $validated = $request->validate([
-            'user_id' => ['required', 'string', 'max:32'],
-            'api_key' => ['required', 'string', 'max:255'],
-        ]);
+        $fields = $impl->apiKeyFields();
+        $rules = [];
+        if (in_array('user_id', $fields, true)) {
+            $rules['user_id'] = ['required', 'string', 'max:32'];
+        }
+        if (in_array('api_key', $fields, true)) {
+            $rules['api_key'] = ['required', 'string', 'max:255'];
+        }
+
+        $validated = $request->validate($rules);
 
         try {
             $tokenData = $impl->connectWithApiKey(
                 $request->user(),
-                $validated['user_id'],
+                $validated['user_id'] ?? '',
                 $validated['api_key'],
             );
         } catch (RuntimeException $e) {
@@ -205,6 +211,7 @@ class IntegrationController extends Controller
             'id' => $integration->id,
             'provider' => $integration->provider->value,
             'label' => $integration->provider->label(),
+            'logo_url' => config('integrations.logos.'.$integration->provider->value),
             'status' => $integration->status->value,
             'account_label' => $integration->account_label,
             'expires_at' => $integration->expires_at,

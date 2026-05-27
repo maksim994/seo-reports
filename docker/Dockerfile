@@ -34,9 +34,29 @@ RUN npm run build
 
 FROM base AS production
 
+RUN apt-get update && apt-get install -y nginx \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /etc/nginx/sites-enabled/default
+
 COPY docker/php/local.ini /usr/local/etc/php/conf.d/local.ini
+COPY docker/php/production.ini /usr/local/etc/php/conf.d/production.ini
+COPY docker/nginx/production.conf /etc/nginx/conf.d/default.conf
+COPY docker/production-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 COPY backend/composer.json backend/composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 COPY backend .
 RUN composer dump-autoload --optimize
+
+RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache
+
 COPY --from=frontend-build /app/dist /var/www/frontend
+
+EXPOSE 80
+
+WORKDIR /var/www/backend
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["web"]

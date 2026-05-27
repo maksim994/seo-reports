@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $comboItems = collect($rows)->map(fn (array $row) => [
         'label' => $row['label'],
         'primary' => $row['reaches'],

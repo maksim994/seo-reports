@@ -11,4 +11,9 @@ class ReportJobPolicy
     {
         return $user->id === $reportJob->user_id;
     }
+
+    public function delete(User $user, ReportJob $reportJob): bool
+    {
+        return $user->id === $reportJob->user_id;
+    }
 }

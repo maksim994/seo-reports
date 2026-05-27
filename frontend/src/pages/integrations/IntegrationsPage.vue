@@ -25,12 +25,18 @@
       <div
         v-for="provider in store.providers"
         :key="provider.provider"
-        class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+        class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
       >
         <div class="mb-4 flex items-start justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <span class="text-2xl">{{ provider.icon }}</span>
-            <div>
+          <div class="flex min-w-0 items-center gap-4">
+            <IntegrationLogo
+              :provider="provider.provider"
+              :label="provider.label"
+              :icon="provider.icon"
+              :logo-url="provider.logo_url"
+              :size="integrationLogoUrl(provider.provider, provider.logo_url) ? 'lg' : 'md'"
+            />
+            <div class="min-w-0">
               <h2 class="font-semibold text-gray-900">{{ provider.label }}</h2>
               <p class="text-sm text-gray-500">{{ provider.description }}</p>
             </div>
@@ -96,25 +102,43 @@
           Добавьте OAuth-ключи в backend/.env для активации подключения.
         </p>
         <p v-if="provider.auth_type === 'api_key'" class="mt-3 text-xs text-gray-400">
-          Нужны User ID и API key из личного кабинета Topvisor.
+          {{ apiKeyHint(provider) }}
         </p>
       </div>
     </div>
 
     <AppModal v-model="showResourcesModal" :title="resourcesModalTitle">
+      <div
+        v-if="resourcesIntegration"
+        class="mb-4 flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3"
+      >
+        <IntegrationLogo
+          :provider="resourcesIntegration.provider"
+          :label="resourcesIntegration.label"
+          :logo-url="resourcesIntegration.logo_url"
+          size="lg"
+        />
+        <div class="text-sm text-gray-600">{{ resourcesIntegration.account_label || 'Подключённый аккаунт' }}</div>
+      </div>
       <div v-if="resourcesLoading" class="text-sm text-gray-500">Загрузка...</div>
       <div v-else-if="resourcesError" class="text-sm text-error-500">{{ resourcesError }}</div>
       <ul v-else-if="resourcesList.length" class="max-h-80 space-y-2 overflow-y-auto text-sm">
+        <li class="sticky top-0 z-10 bg-white pb-2 text-xs text-gray-500">
+          Найдено: {{ resourcesList.length }}
+        </li>
         <li
           v-for="resource in resourcesList"
           :key="resource.id"
           class="rounded-lg border border-gray-100 px-3 py-2"
         >
           <div class="font-medium text-gray-900">
-            {{ resource.label || `#${resource.meta?.counter_id ?? resource.id}` }}
+            {{ integrationResourceTitle(resource) }}
           </div>
-          <div v-if="resource.meta?.site" class="text-xs text-gray-500">
-            {{ resource.meta.site }}
+          <div v-if="integrationResourceSubtitle(resource)" class="text-gray-700">
+            {{ integrationResourceSubtitle(resource) }}
+          </div>
+          <div v-if="integrationResourceHint(resource)" class="text-xs text-gray-500">
+            {{ integrationResourceHint(resource) }}
           </div>
         </li>
       </ul>
@@ -129,12 +153,25 @@
       </template>
     </AppModal>
 
-    <AppModal v-model="showApiKeyModal" title="Подключение по API key">
+    <AppModal v-model="showApiKeyModal" :title="apiKeyModalTitle">
+      <div v-if="apiKeyProvider" class="mb-4 flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <IntegrationLogo
+          :provider="apiKeyProvider.provider"
+          :label="apiKeyProvider.label"
+          :icon="apiKeyProvider.icon"
+          :logo-url="apiKeyProvider.logo_url"
+          size="lg"
+        />
+        <div>
+          <div class="font-medium text-gray-900">{{ apiKeyProvider.label }}</div>
+          <div class="text-xs text-gray-500">Подключение по API</div>
+        </div>
+      </div>
       <form id="api-key-form" class="space-y-4" @submit.prevent="submitApiKey">
         <div v-if="apiKeyError" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-error-500">
           {{ apiKeyError }}
         </div>
-        <div>
+        <div v-if="apiKeyProvider && needsUserId(apiKeyProvider)">
           <label class="mb-1.5 block text-sm font-medium text-gray-700">User ID</label>
           <input
             v-model="apiKeyForm.user_id"
@@ -144,7 +181,9 @@
           />
         </div>
         <div>
-          <label class="mb-1.5 block text-sm font-medium text-gray-700">API key</label>
+          <label class="mb-1.5 block text-sm font-medium text-gray-700">
+            {{ apiKeyProvider?.provider === 'keys_so' ? 'API-токен' : 'API key' }}
+          </label>
           <input
             v-model="apiKeyForm.api_key"
             required
@@ -171,6 +210,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppModal from '@/components/AppModal.vue'
+import IntegrationLogo from '@/components/IntegrationLogo.vue'
+import {
+  integrationResourceHint,
+  integrationResourceSubtitle,
+  integrationResourceTitle,
+} from '@/lib/integrationResource'
+import { integrationLogoUrl } from '@/lib/integrationBranding'
 import { useIntegrationsStore } from '@/stores/integrations'
 import type { AxiosError } from 'axios'
 import type { ApiError, Integration, IntegrationProviderMeta, IntegrationResource } from '@/types'
@@ -183,6 +229,7 @@ const flashMessage = ref('')
 const flashType = ref<'success' | 'error'>('success')
 const showResourcesModal = ref(false)
 const resourcesModalTitle = ref('Ресурсы')
+const resourcesIntegration = ref<Integration | null>(null)
 const resourcesLoading = ref(false)
 const resourcesError = ref('')
 const resourcesList = ref<IntegrationResource[]>([])
@@ -190,6 +237,10 @@ const showApiKeyModal = ref(false)
 const apiKeyProvider = ref<IntegrationProviderMeta | null>(null)
 const apiKeyError = ref('')
 const apiKeyForm = ref({ user_id: '', api_key: '' })
+
+const apiKeyModalTitle = computed(() =>
+  apiKeyProvider.value ? `Подключение: ${apiKeyProvider.value.label}` : 'Подключение по API key',
+)
 
 const flashFromQuery = computed(() => ({
   integration: route.query.integration as string | undefined,
@@ -204,6 +255,18 @@ function statusLabel(status: string) {
   if (status === 'token_expired') return 'токен истёк'
   if (status === 'error') return 'ошибка'
   return status
+}
+
+function needsUserId(provider: IntegrationProviderMeta) {
+  return (provider.api_key_fields ?? ['user_id', 'api_key']).includes('user_id')
+}
+
+function apiKeyHint(provider: IntegrationProviderMeta) {
+  if (provider.provider === 'keys_so') {
+    return 'API-токен из личного кабинета Keys.so (Настройки → API). Лимит: 10 запросов / 10 сек.'
+  }
+
+  return 'User ID — это ID аккаунта Topvisor (из настроек профиля), не ID проекта. API key — из того же раздела.'
 }
 
 async function load() {
@@ -259,6 +322,7 @@ async function handleDisconnect(id: number) {
 
 async function openResources(integration: Integration) {
   resourcesModalTitle.value = `Ресурсы: ${integration.label}`
+  resourcesIntegration.value = integration
   showResourcesModal.value = true
   resourcesLoading.value = true
   resourcesError.value = ''

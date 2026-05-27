@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\ReportFetch;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -187,13 +188,20 @@ class GoogleAnalyticsDataService
             $body['limit'] = $limit;
         }
 
-        $response = Http::withToken($accessToken)
-            ->post("https://analyticsdata.googleapis.com/v1beta/properties/{$propertyId}:runReport", $body);
+        $response = ReportFetch::remember(
+            'ga.report.'.sha1($accessToken.'|'.$propertyId.'|'.json_encode($body)),
+            function () use ($accessToken, $propertyId, $body) {
+                $response = Http::withToken($accessToken)
+                    ->post("https://analyticsdata.googleapis.com/v1beta/properties/{$propertyId}:runReport", $body);
 
-        if (! $response->successful()) {
-            throw new RuntimeException('GA4 API error: '.$response->body());
-        }
+                if (! $response->successful()) {
+                    throw new RuntimeException('GA4 API error: '.$response->body());
+                }
 
-        return $response->json();
+                return $response->json();
+            },
+        );
+
+        return $response;
     }
 }

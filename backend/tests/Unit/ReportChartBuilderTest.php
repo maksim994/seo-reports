@@ -7,22 +7,45 @@ use Tests\TestCase;
 
 class ReportChartBuilderTest extends TestCase
 {
-    public function test_horizontal_bar_chart_renders_html_bars(): void
+    public function test_horizontal_bar_chart_renders_apex_for_html(): void
     {
-        $html = app(ReportChartBuilder::class)->horizontalBarChart([
+        $html = app(ReportChartBuilder::class)->forPdf(false)->horizontalBarChart([
+            ['label' => 'Organic', 'value' => 1200],
+            ['label' => 'Direct', 'value' => 800],
+        ], ['title' => 'Sources']);
+
+        $this->assertStringContainsString('apex-chart', $html);
+        $this->assertStringContainsString('Organic', $html);
+        $this->assertStringContainsString('Sources', $html);
+        $this->assertStringContainsString('data-config', $html);
+    }
+
+    public function test_horizontal_bar_chart_renders_legacy_bars_for_pdf(): void
+    {
+        $html = app(ReportChartBuilder::class)->forPdf(true)->horizontalBarChart([
             ['label' => 'Organic', 'value' => 1200],
             ['label' => 'Direct', 'value' => 800],
         ], ['title' => 'Sources']);
 
         $this->assertStringContainsString('hbar-table', $html);
         $this->assertStringContainsString('Organic', $html);
-        $this->assertStringContainsString('Sources', $html);
-        $this->assertStringNotContainsString('<svg', $html);
     }
 
-    public function test_donut_chart_renders_share_legend(): void
+    public function test_donut_chart_renders_apex_for_html(): void
     {
-        $html = app(ReportChartBuilder::class)->donutChart([
+        $html = app(ReportChartBuilder::class)->forPdf(false)->donutChart([
+            ['label' => 'Search', 'value' => 70],
+            ['label' => 'Direct', 'value' => 30],
+        ], ['title' => 'Traffic']);
+
+        $this->assertStringContainsString('apex-chart', $html);
+        $this->assertStringContainsString('Traffic', $html);
+        $this->assertStringContainsString('donut', $html);
+    }
+
+    public function test_donut_chart_renders_share_legend_for_pdf(): void
+    {
+        $html = app(ReportChartBuilder::class)->forPdf(true)->donutChart([
             ['label' => 'Search', 'value' => 70],
             ['label' => 'Direct', 'value' => 30],
         ], ['title' => 'Traffic']);

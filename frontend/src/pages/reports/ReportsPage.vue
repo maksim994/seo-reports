@@ -62,11 +62,20 @@
                 >
                   HTML
                 </a>
-                <a :href="store.downloadUrl(report.id, 'pdf')" class="text-brand-600 hover:underline">
+                <a
+                  :href="store.downloadUrl(report.id, 'pdf')"
+                  class="mr-3 text-brand-600 hover:underline"
+                >
                   PDF
                 </a>
               </template>
-              <span v-else class="text-gray-400">—</span>
+              <button
+                class="text-error-500 hover:underline disabled:opacity-50"
+                :disabled="deletingId === report.id"
+                @click="remove(report.id)"
+              >
+                {{ deletingId === report.id ? 'Удаление...' : 'Удалить' }}
+              </button>
             </td>
           </tr>
         </tbody>
@@ -76,12 +85,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import EmptyState from '@/components/EmptyState.vue'
 import { useReportsStore } from '@/stores/reports'
 
 const store = useReportsStore()
+const deletingId = ref<number | null>(null)
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ru-RU')
@@ -102,6 +112,16 @@ function statusClass(status: string) {
   if (status === 'done') return 'bg-green-50 text-green-700'
   if (status === 'failed') return 'bg-red-50 text-red-700'
   return 'bg-gray-100 text-gray-600'
+}
+
+async function remove(id: number) {
+  if (!confirm('Удалить отчёт?')) return
+  deletingId.value = id
+  try {
+    await store.deleteReport(id)
+  } finally {
+    deletingId.value = null
+  }
 }
 
 onMounted(() => store.fetchReports())

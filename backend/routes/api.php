@@ -45,9 +45,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/projects/{project}/integrations/{projectIntegration}', [ProjectIntegrationController::class, 'destroy']);
 
     Route::get('/report-blocks/catalog', [ReportBlockCatalogController::class, 'index']);
+    Route::post('/templates/{template}/logo', [ReportTemplateController::class, 'uploadLogo']);
+    Route::get('/templates/{template}/logo', [ReportTemplateController::class, 'showLogo']);
+    Route::delete('/templates/{template}/logo', [ReportTemplateController::class, 'deleteLogo']);
     Route::apiResource('templates', ReportTemplateController::class);
 
     Route::get('/reports', [ReportController::class, 'index']);
+    Route::delete('/reports/{reportJob}', [ReportController::class, 'destroy']);
     Route::get('/reports/{reportJob}', [ReportController::class, 'show']);
     Route::get('/reports/{reportJob}/preview', [ReportController::class, 'preview']);
     Route::get('/reports/{reportJob}/download/{format}', [ReportController::class, 'download']);

@@ -1,4 +1,9 @@
 <div class="report-header">
+    @if (!empty($logoDataUri))
+        <div class="report-logo-wrap">
+            <img src="{{ $logoDataUri }}" alt="Логотип" class="report-logo">
+        </div>
+    @endif
     <h1>{{ $project->name }}</h1>
     <p class="meta">SEO Reports · {{ $template->name }}</p>
     <p class="meta">

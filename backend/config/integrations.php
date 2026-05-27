@@ -33,4 +33,11 @@ return [
             ],
         ],
     ],
+
+    'logos' => [
+        'yandex_metrika' => '/integrations/yandex-metrika.svg',
+        'yandex_webmaster' => '/integrations/yandex-webmaster.svg',
+        'topvisor' => env('TOPVISOR_LOGO_URL', '/integrations/topvisor.svg'),
+        'keys_so' => env('KEYSSO_LOGO_URL', '/integrations/keysso.png'),
+    ],
 ];

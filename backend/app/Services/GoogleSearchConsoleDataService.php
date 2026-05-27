@@ -2,11 +2,36 @@
 
 namespace App\Services;
 
+use App\Support\ReportFetch;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class GoogleSearchConsoleDataService
 {
+    /** @return array<string, mixed> */
+    private function querySearchAnalytics(
+        string $accessToken,
+        string $siteUrl,
+        array $body,
+        string $cacheKey,
+    ): array {
+        $encodedSite = rawurlencode($siteUrl);
+
+        return ReportFetch::remember(
+            'gsc.'.$cacheKey.'.'.sha1($accessToken.'|'.$siteUrl.'|'.json_encode($body)),
+            function () use ($accessToken, $encodedSite, $body) {
+                $response = Http::withToken($accessToken)
+                    ->post("https://www.googleapis.com/webmasters/v3/sites/{$encodedSite}/searchAnalytics/query", $body);
+
+                if (! $response->successful()) {
+                    throw new RuntimeException('GSC API error: '.$response->body());
+                }
+
+                return $response->json();
+            },
+        );
+    }
+
     /** @return list<array{query: string, clicks: float, impressions: float, ctr: float, position: float}> */
     public function fetchTopQueries(
         string $accessToken,
@@ -15,20 +40,14 @@ class GoogleSearchConsoleDataService
         string $dateTo,
         int $limit = 25,
     ): array {
-        $encodedSite = rawurlencode($siteUrl);
-        $response = Http::withToken($accessToken)
-            ->post("https://www.googleapis.com/webmasters/v3/sites/{$encodedSite}/searchAnalytics/query", [
-                'startDate' => $dateFrom,
-                'endDate' => $dateTo,
-                'dimensions' => ['query'],
-                'rowLimit' => $limit,
-            ]);
+        $payload = $this->querySearchAnalytics($accessToken, $siteUrl, [
+            'startDate' => $dateFrom,
+            'endDate' => $dateTo,
+            'dimensions' => ['query'],
+            'rowLimit' => $limit,
+        ], 'top-queries');
 
-        if (! $response->successful()) {
-            throw new RuntimeException('GSC API error: '.$response->body());
-        }
-
-        return collect($response->json('rows') ?? [])
+        return collect($payload['rows'] ?? [])
             ->map(fn (array $row) => [
                 'query' => $row['keys'][0] ?? '—',
                 'clicks' => (float) ($row['clicks'] ?? 0),
@@ -47,18 +66,12 @@ class GoogleSearchConsoleDataService
         string $dateFrom,
         string $dateTo,
     ): ?array {
-        $encodedSite = rawurlencode($siteUrl);
-        $response = Http::withToken($accessToken)
-            ->post("https://www.googleapis.com/webmasters/v3/sites/{$encodedSite}/searchAnalytics/query", [
-                'startDate' => $dateFrom,
-                'endDate' => $dateTo,
-            ]);
+        $payload = $this->querySearchAnalytics($accessToken, $siteUrl, [
+            'startDate' => $dateFrom,
+            'endDate' => $dateTo,
+        ], 'summary');
 
-        if (! $response->successful()) {
-            throw new RuntimeException('GSC API error: '.$response->body());
-        }
-
-        $row = $response->json('rows.0');
+        $row = $payload['rows'][0] ?? null;
         if (! $row) {
             return null;
         }
@@ -79,20 +92,14 @@ class GoogleSearchConsoleDataService
         string $dateTo,
         int $limit = 25,
     ): array {
-        $encodedSite = rawurlencode($siteUrl);
-        $response = Http::withToken($accessToken)
-            ->post("https://www.googleapis.com/webmasters/v3/sites/{$encodedSite}/searchAnalytics/query", [
-                'startDate' => $dateFrom,
-                'endDate' => $dateTo,
-                'dimensions' => ['page'],
-                'rowLimit' => $limit,
-            ]);
+        $payload = $this->querySearchAnalytics($accessToken, $siteUrl, [
+            'startDate' => $dateFrom,
+            'endDate' => $dateTo,
+            'dimensions' => ['page'],
+            'rowLimit' => $limit,
+        ], 'top-pages');
 
-        if (! $response->successful()) {
-            throw new RuntimeException('GSC API error: '.$response->body());
-        }
-
-        return collect($response->json('rows') ?? [])
+        return collect($payload['rows'] ?? [])
             ->map(fn (array $row) => [
                 'page' => $row['keys'][0] ?? '—',
                 'clicks' => (float) ($row['clicks'] ?? 0),

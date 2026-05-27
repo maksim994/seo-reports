@@ -46,6 +46,15 @@
             border: 0;
             padding: 0;
         }
+        .report-logo-wrap { margin-bottom: 16px; }
+        .report-logo {
+            max-height: 64px;
+            max-width: 220px;
+            object-fit: contain;
+            background: rgba(255,255,255,0.95);
+            border-radius: 8px;
+            padding: 8px 12px;
+        }
         .report-header .meta {
             color: #dbeafe;
             font-size: 13px;
@@ -136,6 +145,17 @@
             margin-bottom: 12px;
             page-break-inside: avoid;
         }
+        .chart-box.chart-apex {
+            background: #ffffff;
+            padding: 12px 8px 4px;
+        }
+        .apex-chart {
+            width: 100%;
+        }
+        .apexcharts-tooltip {
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08) !important;
+        }
         body.report-pdf .chart-box {
             background: #ffffff;
             border-radius: 0;
@@ -218,5 +238,8 @@
 @endforeach
     <div class="report-footer">SEO Reports · {{ now()->format('d.m.Y H:i') }}</div>
 </div>
+@if (!($forPdf ?? false))
+    @include('reports.partials.apexcharts-init')
+@endif
 </body>
 </html>

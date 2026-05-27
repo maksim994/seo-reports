@@ -9,6 +9,7 @@ enum IntegrationProvider: string
     case YandexWebmaster = 'yandex_webmaster';
     case GoogleSearchConsole = 'google_search_console';
     case Topvisor = 'topvisor';
+    case KeysSo = 'keys_so';
 
     public function label(): string
     {
@@ -18,6 +19,7 @@ enum IntegrationProvider: string
             self::YandexWebmaster => 'Яндекс.Вебмастер',
             self::GoogleSearchConsole => 'Google Search Console',
             self::Topvisor => 'Topvisor',
+            self::KeysSo => 'Keys.so',
         };
     }
 
@@ -29,6 +31,7 @@ enum IntegrationProvider: string
             self::YandexWebmaster => 'Поисковые запросы и индексация в Яндексе',
             self::GoogleSearchConsole => 'Запросы и позиции в Google',
             self::Topvisor => 'Позиции, видимость и TOP-N по ключевым фразам',
+            self::KeysSo => 'Мониторинг позиций и видимость через Keys.so',
         };
     }
 
@@ -40,6 +43,7 @@ enum IntegrationProvider: string
             self::YandexWebmaster => '🔍',
             self::GoogleSearchConsole => '🌐',
             self::Topvisor => '📍',
+            self::KeysSo => '🔑',
         };
     }
 

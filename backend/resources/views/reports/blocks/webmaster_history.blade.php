@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $timeseries = !empty($series)
         ? $charts->timeSeriesChart($series, ['title' => $valueLabel, 'max_points' => 31])
         : null;

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\ReportFetch;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -22,16 +23,24 @@ class YandexWebmasterDataService
             'date_to' => $dateTo,
             'limit' => $limit,
         ]).'&query_indicator=TOTAL_SHOWS&query_indicator=TOTAL_CLICKS';
+        $url = "https://api.webmaster.yandex.net/v4/user/{$userId}/hosts/{$hostId}/search-queries/popular?{$query}";
 
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get("https://api.webmaster.yandex.net/v4/user/{$userId}/hosts/{$hostId}/search-queries/popular?{$query}");
+        $payload = ReportFetch::remember(
+            'webmaster.popular.'.sha1($accessToken.'|'.$hostId.'|'.$dateFrom.'|'.$dateTo.'|'.$limit),
+            function () use ($accessToken, $url) {
+                $response = Http::withHeaders([
+                    'Authorization' => 'OAuth '.$accessToken,
+                ])->get($url);
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Webmaster API error: '.$response->body());
-        }
+                if (! $response->successful()) {
+                    throw new RuntimeException('Webmaster API error: '.$response->body());
+                }
 
-        return collect($response->json('queries') ?? [])
+                return $response->json();
+            },
+        );
+
+        return collect($payload['queries'] ?? [])
             ->map(function (array $item) {
                 $indicators = $item['indicators'] ?? [];
                 $shows = (float) ($indicators['TOTAL_SHOWS'] ?? 0);
@@ -50,15 +59,20 @@ class YandexWebmasterDataService
 
     private function fetchUserId(string $accessToken): int
     {
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get('https://api.webmaster.yandex.net/v4/user');
+        return ReportFetch::remember(
+            'webmaster.user.'.sha1($accessToken),
+            function () use ($accessToken) {
+                $response = Http::withHeaders([
+                    'Authorization' => 'OAuth '.$accessToken,
+                ])->get('https://api.webmaster.yandex.net/v4/user');
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Webmaster user API error: '.$response->body());
-        }
+                if (! $response->successful()) {
+                    throw new RuntimeException('Webmaster user API error: '.$response->body());
+                }
 
-        return (int) $response->json('user_id');
+                return (int) $response->json('user_id');
+            },
+        );
     }
 
     private function computeCtr(float $clicks, float $shows): float
@@ -82,18 +96,26 @@ class YandexWebmasterDataService
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
         ]).'&query_indicator=TOTAL_SHOWS&query_indicator=TOTAL_CLICKS';
+        $url = "https://api.webmaster.yandex.net/v4/user/{$userId}/hosts/{$hostId}/search-queries/all/history?{$query}";
 
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get("https://api.webmaster.yandex.net/v4/user/{$userId}/hosts/{$hostId}/search-queries/all/history?{$query}");
+        $payload = ReportFetch::remember(
+            'webmaster.summary.'.sha1($accessToken.'|'.$hostId.'|'.$dateFrom.'|'.$dateTo),
+            function () use ($accessToken, $url) {
+                $response = Http::withHeaders([
+                    'Authorization' => 'OAuth '.$accessToken,
+                ])->get($url);
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Webmaster API error: '.$response->body());
-        }
+                if (! $response->successful()) {
+                    throw new RuntimeException('Webmaster API error: '.$response->body());
+                }
+
+                return $response->json();
+            },
+        );
 
         $shows = 0.0;
         $clicks = 0.0;
-        foreach ($response->json('history') ?? [] as $point) {
+        foreach ($payload['history'] ?? [] as $point) {
             $indicators = $point['indicators'] ?? [];
             $shows += (float) ($indicators['TOTAL_SHOWS'] ?? 0);
             $clicks += (float) ($indicators['TOTAL_CLICKS'] ?? 0);
@@ -157,18 +179,27 @@ class YandexWebmasterDataService
         callable $labelResolver,
     ): array {
         $userId = $this->fetchUserId($accessToken);
-        $response = Http::withHeaders([
-            'Authorization' => 'OAuth '.$accessToken,
-        ])->get("https://api.webmaster.yandex.net/v4/user/{$userId}/hosts/{$hostId}/{$path}", [
-            'date_from' => $dateFrom,
-            'date_to' => $dateTo,
-        ]);
+        $url = "https://api.webmaster.yandex.net/v4/user/{$userId}/hosts/{$hostId}/{$path}";
 
-        if (! $response->successful()) {
-            throw new RuntimeException('Webmaster API error: '.$response->body());
-        }
+        $payload = ReportFetch::remember(
+            'webmaster.history.'.sha1($accessToken.'|'.$hostId.'|'.$path.'|'.$dateFrom.'|'.$dateTo),
+            function () use ($accessToken, $url, $dateFrom, $dateTo) {
+                $response = Http::withHeaders([
+                    'Authorization' => 'OAuth '.$accessToken,
+                ])->get($url, [
+                    'date_from' => $dateFrom,
+                    'date_to' => $dateTo,
+                ]);
 
-        return collect($response->json('history') ?? $response->json('points') ?? [])
+                if (! $response->successful()) {
+                    throw new RuntimeException('Webmaster API error: '.$response->body());
+                }
+
+                return $response->json();
+            },
+        );
+
+        return collect($payload['history'] ?? $payload['points'] ?? [])
             ->map(function (array $point) use ($valueResolver, $labelResolver) {
                 $date = (string) ($point['date'] ?? $point['timestamp'] ?? '—');
 

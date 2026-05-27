@@ -1,5 +1,5 @@
 @php
-    $charts = app(\App\Services\ReportChartBuilder::class);
+    $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $showItems = collect($rows)->map(fn (array $row) => [
         'label' => $row['query'],
         'value' => $row['shows'],
