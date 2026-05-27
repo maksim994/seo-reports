@@ -68,17 +68,23 @@ flowchart LR
 
 ## Object Storage
 
-Production: внешний S3 (Yandex Object Storage, AWS S3, MinIO на отдельном VPS).
+Production: внешний S3 (Beget, Yandex Object Storage, AWS S3, MinIO).
 
 ```env
 FILESYSTEM_DISK=s3
+REPORTS_STORAGE_DISK=s3
+TEMPLATE_LOGO_DISK=s3
+
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
-AWS_DEFAULT_REGION=
-AWS_BUCKET=seo-reports
-AWS_ENDPOINT=          # для S3-compatible
+AWS_DEFAULT_REGION=ru1
+AWS_BUCKET=your-bucket-name
+AWS_ENDPOINT=https://s3.ru1.storage.beget.cloud
 AWS_USE_PATH_STYLE_ENDPOINT=true
+AWS_PREFIX=seo-report
 ```
+
+Файлы в бакете: `seo-report/reports/{id}/report.pdf`, `seo-report/templates/{id}/logo.png`.
 
 ## Environment Variables
 

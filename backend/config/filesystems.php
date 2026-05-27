@@ -56,6 +56,8 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            // All S3 keys are stored under this prefix, e.g. seo-report/reports/1/report.pdf
+            'root' => env('AWS_PREFIX', ''),
             'throw' => false,
             'report' => false,
         ],
