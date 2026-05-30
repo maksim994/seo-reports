@@ -128,9 +128,23 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
             ]);
 
             $providerLabel = $providerEnum->label();
+            $message = $this->positionErrorMessage($providerLabel, $e->getMessage());
 
-            return $this->unavailable("Данные {$providerLabel} временно недоступны", $title);
+            return $this->unavailable($message, $title);
         }
+    }
+
+    private function positionErrorMessage(string $providerLabel, string $error): string
+    {
+        if (str_contains($error, 'has no tracked regions')) {
+            return "У выбранного проекта {$providerLabel} нет регионов мониторинга. Откройте «Источники» и выберите другой проект.";
+        }
+
+        if (str_contains($error, 'not found')) {
+            return "Проект {$providerLabel} не найден. Проверьте привязку в «Источники».";
+        }
+
+        return "Данные {$providerLabel} временно недоступны";
     }
 
     /** @return array{0: IntegrationProvider, 1: ProjectIntegration}|null */

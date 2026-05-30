@@ -6,6 +6,12 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: '/share/:token',
+      name: 'share-report',
+      component: () => import('@/pages/share/ShareReportPage.vue'),
+      meta: { guest: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/pages/auth/LoginPage.vue'),
@@ -22,11 +28,21 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', redirect: '/projects' },
+        { path: '', redirect: '/dashboard' },
+        {
+          path: 'dashboard',
+          name: 'dashboard',
+          component: () => import('@/pages/dashboard/DashboardPage.vue'),
+        },
         {
           path: 'projects',
           name: 'projects',
           component: () => import('@/pages/projects/ProjectsPage.vue'),
+        },
+        {
+          path: 'projects/:id',
+          name: 'project',
+          component: () => import('@/pages/projects/ProjectPage.vue'),
         },
         {
           path: 'projects/:id/generate',
@@ -37,6 +53,11 @@ const router = createRouter({
           path: 'projects/:id/work',
           name: 'project-work',
           component: () => import('@/pages/projects/ProjectWorkItemsPage.vue'),
+        },
+        {
+          path: 'projects/:id/audits',
+          name: 'project-audits',
+          component: () => import('@/pages/projects/ProjectTechnicalAuditsPage.vue'),
         },
         {
           path: 'integrations',
@@ -110,8 +131,8 @@ router.beforeEach(async (to) => {
     return { name: 'projects' }
   }
 
-  if (to.meta.guest && auth.isAuthenticated) {
-    return { name: 'projects' }
+  if (to.meta.guest && auth.isAuthenticated && to.name !== 'share-report') {
+    return { name: 'dashboard' }
   }
 })
 

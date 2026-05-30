@@ -2,6 +2,7 @@ FROM php:8.4-fpm AS base
 
 RUN apt-get update && apt-get install -y \
     git curl zip unzip libpq-dev libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
+    python3 python3-pip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo pdo_pgsql zip gd bcmath pcntl \
     && pecl install redis \
@@ -20,7 +21,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 COPY backend/composer.json backend/composer.lock ./
 RUN composer install --no-scripts --no-autoloader --prefer-dist
 COPY backend .
-RUN composer dump-autoload --optimize
+RUN composer dump-autoload --optimize \
+    && pip3 install --break-system-packages -r scripts/technical-audit/requirements.txt
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["php-fpm"]
@@ -47,7 +49,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 COPY backend/composer.json backend/composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 COPY backend .
-RUN composer dump-autoload --optimize
+RUN composer dump-autoload --optimize \
+    && pip3 install --break-system-packages -r scripts/technical-audit/requirements.txt
 
 RUN mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache

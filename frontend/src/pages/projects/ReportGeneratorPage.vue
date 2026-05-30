@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="mb-6">
-      <RouterLink to="/projects" class="text-sm text-brand-600 hover:underline">
-        ← К проектам
+      <RouterLink :to="`/projects/${projectId}`" class="text-sm text-brand-600 hover:underline">
+        ← Настройки проекта
       </RouterLink>
       <h1 class="mt-2 text-2xl font-semibold text-gray-900">Генератор отчёта</h1>
       <p v-if="project" class="mt-1 text-sm text-gray-500">
@@ -148,6 +148,12 @@
                   >
                     PDF
                   </a>
+                  <button
+                    class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                    @click="openShare(job)"
+                  >
+                    {{ job.share_enabled ? 'Ссылка ✓' : 'Ссылка' }}
+                  </button>
                 </template>
                 <button
                   class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-error-500 hover:bg-red-50 disabled:opacity-50"
@@ -162,12 +168,20 @@
         </div>
       </section>
     </div>
+
+    <ReportShareModal
+      v-if="shareReport"
+      v-model="shareOpen"
+      :report="shareReport"
+      @updated="onShareUpdated"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { onUnmounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import ReportShareModal from '@/components/ReportShareModal.vue'
 import { useProjectsStore } from '@/stores/projects'
 import { useReportsStore } from '@/stores/reports'
 import { useTemplatesStore } from '@/stores/templates'
@@ -187,7 +201,19 @@ const generating = ref(false)
 const error = ref('')
 const compareEnabled = ref(false)
 const deletingId = ref<number | null>(null)
+const shareOpen = ref(false)
+const shareReport = ref<ReportJob | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
+
+function openShare(job: ReportJob) {
+  shareReport.value = job
+  shareOpen.value = true
+}
+
+function onShareUpdated(job: ReportJob) {
+  shareReport.value = job
+  upsertRecentJob(job)
+}
 
 const form = reactive({
   report_template_id: 0,

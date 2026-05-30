@@ -55,7 +55,11 @@
         <tbody class="divide-y divide-gray-100">
           <tr v-for="project in store.projects" :key="project.id" class="hover:bg-gray-50">
             <td class="px-6 py-4 text-gray-500">{{ project.id }}</td>
-            <td class="px-6 py-4 font-medium text-gray-900">{{ project.name }}</td>
+            <td class="px-6 py-4 font-medium text-gray-900">
+              <RouterLink :to="`/projects/${project.id}`" class="text-brand-600 hover:underline">
+                {{ project.name }}
+              </RouterLink>
+            </td>
             <td class="px-6 py-4 text-gray-600">{{ project.domain || '—' }}</td>
             <td class="px-6 py-4">
               <span
@@ -70,12 +74,12 @@
               </span>
             </td>
             <td class="px-6 py-4 text-right">
-              <button
+              <RouterLink
+                :to="`/projects/${project.id}`"
                 class="mr-3 text-brand-600 hover:underline"
-                @click="openSources(project)"
               >
-                Источники
-              </button>
+                Настройки
+              </RouterLink>
               <RouterLink
                 :to="`/projects/${project.id}/generate`"
                 class="mr-3 text-brand-600 hover:underline"
@@ -87,6 +91,12 @@
                 class="mr-3 text-brand-600 hover:underline"
               >
                 Работы
+              </RouterLink>
+              <RouterLink
+                :to="`/projects/${project.id}/audits`"
+                class="mr-3 text-brand-600 hover:underline"
+              >
+                Аудит
               </RouterLink>
               <button class="text-error-500 hover:underline" @click="remove(project.id)">
                 Удалить
@@ -148,14 +158,6 @@
         </button>
       </template>
     </AppModal>
-
-    <ProjectSourcesModal
-      v-model="showSourcesModal"
-      :project-id="sourcesProject?.id ?? null"
-      :project-name="sourcesProject?.name ?? ''"
-      :project-domain="sourcesProject?.domain ?? null"
-      @saved="loadProjects"
-    />
   </div>
 </template>
 
@@ -164,15 +166,12 @@ import { onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import AppModal from '@/components/AppModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import ProjectSourcesModal from '@/components/ProjectSourcesModal.vue'
 import { useProjectsStore } from '@/stores/projects'
 import type { AxiosError } from 'axios'
-import type { ApiError, Project } from '@/types'
+import type { ApiError } from '@/types'
 
 const store = useProjectsStore()
 const showModal = ref(false)
-const showSourcesModal = ref(false)
-const sourcesProject = ref<Project | null>(null)
 const saving = ref(false)
 const formError = ref('')
 const filter = ref('all')
@@ -213,11 +212,6 @@ async function create() {
 async function remove(id: number) {
   if (!confirm('Удалить проект?')) return
   await store.deleteProject(id)
-}
-
-function openSources(project: Project) {
-  sourcesProject.value = project
-  showSourcesModal.value = true
 }
 
 onMounted(loadProjects)

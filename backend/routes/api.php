@@ -4,23 +4,36 @@ use App\Http\Controllers\Api\Admin\ProjectAdminController;
 use App\Http\Controllers\Api\Admin\SettingsAdminController;
 use App\Http\Controllers\Api\Admin\UserAdminController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\IntegrationController;
+use App\Http\Controllers\Api\PublicReportController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectIntegrationController;
 use App\Http\Controllers\Api\PublicSettingsController;
+use App\Http\Controllers\Api\ReportAssetController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportBlockCatalogController;
 use App\Http\Controllers\Api\ReportTemplateController;
+use App\Http\Controllers\Api\TechnicalAuditController;
+use App\Http\Controllers\Api\TechnicalAuditWebhookController;
 use App\Http\Controllers\Api\WorkItemController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', [HealthController::class, 'index']);
+Route::get('/vendor/apexcharts.min.js', [ReportAssetController::class, 'apexcharts']);
+Route::post('/webhooks/technical-audits/{token}', [TechnicalAuditWebhookController::class, 'store']);
 Route::get('/settings/public', [PublicSettingsController::class, 'index']);
 Route::get('/integrations/{provider}/callback', [IntegrationController::class, 'callback']);
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+Route::prefix('public/reports/{token}')->group(function () {
+    Route::get('/', [PublicReportController::class, 'show']);
+    Route::get('/preview', [PublicReportController::class, 'preview']);
+    Route::get('/download/{format}', [PublicReportController::class, 'download']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -50,13 +63,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/templates/{template}/logo', [ReportTemplateController::class, 'deleteLogo']);
     Route::apiResource('templates', ReportTemplateController::class);
 
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+
     Route::get('/reports', [ReportController::class, 'index']);
     Route::delete('/reports/{reportJob}', [ReportController::class, 'destroy']);
     Route::get('/reports/{reportJob}', [ReportController::class, 'show']);
     Route::get('/reports/{reportJob}/preview', [ReportController::class, 'preview']);
     Route::get('/reports/{reportJob}/download/{format}', [ReportController::class, 'download']);
+    Route::post('/reports/{reportJob}/share', [ReportController::class, 'enableShare']);
+    Route::delete('/reports/{reportJob}/share', [ReportController::class, 'disableShare']);
+    Route::post('/reports/{reportJob}/share/regenerate', [ReportController::class, 'regenerateShare']);
     Route::get('/projects/{project}/reports', [ReportController::class, 'projectIndex']);
     Route::post('/projects/{project}/reports', [ReportController::class, 'store']);
+
+    Route::get('/technical-audits', [TechnicalAuditController::class, 'index']);
+    Route::delete('/technical-audits/{technicalAuditJob}', [TechnicalAuditController::class, 'destroy']);
+    Route::get('/technical-audits/{technicalAuditJob}', [TechnicalAuditController::class, 'show']);
+    Route::get('/technical-audits/{technicalAuditJob}/download/{format}', [TechnicalAuditController::class, 'download']);
+    Route::post('/technical-audits/{technicalAuditJob}/sync', [TechnicalAuditController::class, 'sync']);
+    Route::post('/technical-audits/{technicalAuditJob}/import', [TechnicalAuditController::class, 'import']);
+    Route::get('/projects/{project}/technical-audits', [TechnicalAuditController::class, 'projectIndex']);
+    Route::post('/projects/{project}/technical-audits', [TechnicalAuditController::class, 'store']);
 
     Route::middleware('admin')->prefix('admin')->group(function () {
         Route::get('/users', [UserAdminController::class, 'index']);

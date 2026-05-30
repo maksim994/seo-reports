@@ -11,6 +11,7 @@ use App\Integrations\KeysSoProvider;
 use App\Integrations\TopvisorProvider;
 use App\Integrations\YandexMetrikaProvider;
 use App\Integrations\YandexWebmasterProvider;
+use App\Integrations\YandexWordstatProvider;
 use App\Services\KeysSoDataService;
 use App\Services\TopvisorDataService;
 use InvalidArgumentException;
@@ -34,6 +35,7 @@ class IntegrationManager
             new YandexMetrikaProvider,
             new GoogleAnalyticsProvider,
             new YandexWebmasterProvider,
+            new YandexWordstatProvider,
             new GoogleSearchConsoleProvider,
             new TopvisorProvider(app(TopvisorDataService::class)),
             new KeysSoProvider(app(KeysSoDataService::class)),

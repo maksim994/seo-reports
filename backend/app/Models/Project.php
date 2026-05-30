@@ -47,4 +47,9 @@ class Project extends Model
     {
         return $this->hasMany(WorkItem::class);
     }
+
+    public function technicalAuditJobs(): HasMany
+    {
+        return $this->hasMany(TechnicalAuditJob::class);
+    }
 }

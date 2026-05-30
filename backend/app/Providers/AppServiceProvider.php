@@ -6,6 +6,7 @@ use App\Integrations\Positions\KeysSoPositionProvider;
 use App\Integrations\Positions\TopvisorPositionProvider;
 use App\Models\ReportJob;
 use App\Models\ReportTemplate;
+use App\Models\TechnicalAuditJob;
 use App\Services\PositionProviderRegistry;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -32,5 +33,6 @@ class AppServiceProvider extends ServiceProvider
     {
         Route::bind('template', fn (string $value) => ReportTemplate::query()->findOrFail($value));
         Route::bind('reportJob', fn (string $value) => ReportJob::query()->findOrFail($value));
+        Route::bind('technicalAuditJob', fn (string $value) => TechnicalAuditJob::query()->findOrFail($value));
     }
 }

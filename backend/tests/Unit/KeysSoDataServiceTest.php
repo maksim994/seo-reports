@@ -64,6 +64,48 @@ class KeysSoDataServiceTest extends TestCase
         $this->assertSame('dashboard:100', $resources[1]['id']);
     }
 
+    public function test_list_project_resources_enriches_missing_tracking_item_from_entity(): void
+    {
+        Http::fake([
+            'api.keys.so/monitoring/3451/entity' => Http::response([
+                'id' => 3451,
+                'name' => 'Koldiz',
+                'trackingItem' => 'koldiz.ru',
+                'searchSettings' => [
+                    ['engine' => 4, 'regionId' => 20950, 'regionName' => 'Москва'],
+                ],
+            ]),
+            'api.keys.so/monitoring*' => Http::response([
+                'current_page' => 1,
+                'last_page' => 1,
+                'total' => 1,
+                'data' => [
+                    [
+                        'id' => 3451,
+                        'name' => 'Koldiz',
+                        'search_settings' => [
+                            [
+                                'search_engine' => 4,
+                                'region_id' => 20950,
+                                'region_name' => 'Москва',
+                                'engine_name' => 'Google (десктоп)',
+                            ],
+                        ],
+                    ],
+                ],
+            ]),
+            'api.keys.so/projects*' => Http::response([]),
+        ]);
+
+        $service = new KeysSoDataService(new KeysSoRateLimiter);
+        $resources = $service->listProjectResources('token');
+
+        $this->assertCount(1, $resources);
+        $this->assertSame('3451', $resources[0]['id']);
+        $this->assertSame('Koldiz · koldiz.ru (#3451)', $resources[0]['label']);
+        $this->assertSame('koldiz.ru', $resources[0]['meta']['site']);
+    }
+
     public function test_fetch_summary_maps_chart_data(): void
     {
         Http::fake([

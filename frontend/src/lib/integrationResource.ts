@@ -103,6 +103,28 @@ export function integrationResourceHint(resource: IntegrationResource): string |
   return 'Регионы для проверки позиций не настроены'
 }
 
+export function integrationResourceSupportsBinding(resource: IntegrationResource): boolean {
+  return resource.meta?.supports_positions !== false && resource.meta?.resource_kind !== 'dashboard'
+}
+
+export function keysSoResourceGroups(resources: IntegrationResource[]): {
+  monitoring: IntegrationResource[]
+  dashboard: IntegrationResource[]
+} {
+  const monitoring: IntegrationResource[] = []
+  const dashboard: IntegrationResource[] = []
+
+  for (const resource of resources) {
+    if (resource.meta?.resource_kind === 'dashboard' || resource.meta?.supports_positions === false) {
+      dashboard.push(resource)
+    } else {
+      monitoring.push(resource)
+    }
+  }
+
+  return { monitoring, dashboard }
+}
+
 export function formatIntegrationResourceOption(resource: IntegrationResource): string {
   return resource.label || integrationResourceTitle(resource)
 }

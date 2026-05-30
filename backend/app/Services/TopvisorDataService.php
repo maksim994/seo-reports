@@ -56,7 +56,7 @@ class TopvisorDataService
     public function listProjectResources(string $userId, string $apiKey): array
     {
         return collect($this->listProjects($userId, $apiKey))
-            ->filter(fn (array $project) => ($project['on'] ?? 1) !== 0)
+            ->filter(fn (array $project) => $this->isBindableProject($project))
             ->map(fn (array $project) => [
                 'id' => (string) $project['id'],
                 'label' => $this->projectResourceLabel($project),
@@ -270,6 +270,16 @@ class TopvisorDataService
         }
 
         return (float) $value;
+    }
+
+    /** @param  array{id: int, on: int, regions: list<array<string, mixed>>}  $project */
+    private function isBindableProject(array $project): bool
+    {
+        if (($project['on'] ?? -1) === -1) {
+            return false;
+        }
+
+        return ($project['regions'] ?? []) !== [];
     }
 
     /** @return array<string, mixed> */

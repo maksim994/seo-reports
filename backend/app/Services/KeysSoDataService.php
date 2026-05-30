@@ -99,7 +99,10 @@ class KeysSoDataService
     /** @return list<array{id: string, label: string, meta?: array<string, mixed>}> */
     public function listProjectResources(string $token): array
     {
-        $monitoring = $this->listMonitoringProjects($token);
+        $monitoring = array_map(
+            fn (array $project) => $this->enrichMonitoringProject($token, $project),
+            $this->listMonitoringProjects($token),
+        );
         $resources = [];
 
         foreach ($monitoring as $project) {
@@ -449,10 +452,49 @@ class KeysSoDataService
         ];
     }
 
+    /**
+     * List endpoint omits trackingItem; entity has the tracked domain.
+     *
+     * @param  array{id: int, name: string, tracking_item: string, search_settings: list<array<string, mixed>>}  $project
+     * @return array{id: int, name: string, tracking_item: string, search_settings: list<array<string, mixed>>}
+     */
+    private function enrichMonitoringProject(string $token, array $project): array
+    {
+        if ($project['id'] <= 0 || ($project['tracking_item'] !== '' && $project['search_settings'] !== [])) {
+            return $project;
+        }
+
+        $entity = $this->fetchProjectEntity($token, $project['id']);
+
+        if ($project['tracking_item'] === '') {
+            $project['tracking_item'] = trim((string) ($entity['trackingItem'] ?? $entity['tracking_item'] ?? ''));
+        }
+
+        if ($project['search_settings'] === []) {
+            $project = $this->normalizeProject([
+                'id' => $project['id'],
+                'name' => $project['name'],
+                'trackingItem' => $project['tracking_item'],
+                'search_settings' => $entity['searchSettings'] ?? $entity['search_settings'] ?? [],
+            ]);
+        }
+
+        return $project;
+    }
+
     /** @param  array{id: int, name: string, tracking_item: string}  $project */
     private function projectResourceLabel(array $project): string
     {
-        $name = $project['name'] !== '' ? $project['name'] : $project['tracking_item'];
+        $domain = $project['tracking_item'];
+        $name = $project['name'] !== '' ? $project['name'] : $domain;
+
+        if ($name === '') {
+            return 'Проект #'.$project['id'];
+        }
+
+        if ($domain !== '' && $domain !== $name && ! str_contains(mb_strtolower($name), mb_strtolower($domain))) {
+            return $name.' · '.$domain.' (#'.$project['id'].')';
+        }
 
         return $name.' (#'.$project['id'].')';
     }

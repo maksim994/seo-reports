@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import api from '@/lib/api'
-import type { ReportJob } from '@/types'
+import type { PublicReportMeta, ReportJob } from '@/types'
 
 export const useReportsStore = defineStore('reports', () => {
   const reports = ref<ReportJob[]>([])
@@ -49,6 +49,49 @@ export const useReportsStore = defineStore('reports', () => {
     return `/api/reports/${id}/download/${format}`
   }
 
+  function publicShareUrl(token: string) {
+    return `${window.location.origin}/share/${token}`
+  }
+
+  function publicPreviewUrl(token: string) {
+    return `/api/public/reports/${token}/preview`
+  }
+
+  function publicDownloadUrl(token: string, format: 'html' | 'pdf') {
+    return `/api/public/reports/${token}/download/${format}`
+  }
+
+  async function enableShare(id: number, shareExpiresAt?: string | null) {
+    const payload = shareExpiresAt ? { share_expires_at: shareExpiresAt } : {}
+    const { data } = await api.post<{ data: ReportJob }>(`/reports/${id}/share`, payload)
+    updateReportInList(data.data)
+    return data.data
+  }
+
+  async function disableShare(id: number) {
+    const { data } = await api.delete<{ data: ReportJob }>(`/reports/${id}/share`)
+    updateReportInList(data.data)
+    return data.data
+  }
+
+  async function regenerateShare(id: number) {
+    const { data } = await api.post<{ data: ReportJob }>(`/reports/${id}/share/regenerate`)
+    updateReportInList(data.data)
+    return data.data
+  }
+
+  async function fetchPublicReport(token: string) {
+    const { data } = await api.get<{ data: PublicReportMeta }>(`/public/reports/${token}`)
+    return data.data
+  }
+
+  function updateReportInList(report: ReportJob) {
+    const index = reports.value.findIndex((item) => item.id === report.id)
+    if (index >= 0) {
+      reports.value[index] = report
+    }
+  }
+
   async function deleteReport(id: number) {
     await api.delete(`/reports/${id}`)
     reports.value = reports.value.filter((r) => r.id !== id)
@@ -63,6 +106,13 @@ export const useReportsStore = defineStore('reports', () => {
     generateReport,
     previewUrl,
     downloadUrl,
+    publicShareUrl,
+    publicPreviewUrl,
+    publicDownloadUrl,
+    enableShare,
+    disableShare,
+    regenerateShare,
+    fetchPublicReport,
     deleteReport,
   }
 })

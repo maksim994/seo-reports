@@ -1,4 +1,4 @@
-<script src="https://cdn.jsdelivr.net/npm/apexcharts@4.4.0"></script>
+<script src="{{ url('/api/vendor/apexcharts.min.js') }}"></script>
 <script>
 (function () {
     function formatReportNumber(value) {
@@ -57,6 +57,11 @@
     }
 
     function renderCharts() {
+        if (typeof ApexCharts === 'undefined') {
+            console.error('ApexCharts library failed to load');
+            return;
+        }
+
         document.querySelectorAll('.apex-chart[data-config]').forEach(function (element) {
             if (element.dataset.rendered === '1') {
                 return;

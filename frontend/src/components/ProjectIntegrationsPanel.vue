@@ -1,5 +1,17 @@
 <template>
-  <AppModal :model-value="modelValue" :title="`Источники: ${projectName}`" @update:model-value="emit('update:modelValue', $event)">
+  <section class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+    <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="text-lg font-medium text-gray-900">Источники данных</h2>
+        <p class="mt-1 text-sm text-gray-500">
+          Привязка счётчиков, сайтов и проектов мониторинга к этому проекту.
+        </p>
+      </div>
+      <RouterLink to="/integrations" class="text-sm font-medium text-brand-600 hover:underline">
+        Управление интеграциями →
+      </RouterLink>
+    </div>
+
     <div v-if="loading" class="text-sm text-gray-500">Загрузка...</div>
 
     <div v-else-if="integrations.length === 0" class="text-sm text-gray-600">
@@ -9,11 +21,11 @@
       </RouterLink>
     </div>
 
-    <div v-else class="space-y-5">
+    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="integration in integrations"
         :key="integration.id"
-        class="rounded-xl border border-gray-200 p-4"
+        class="flex flex-col rounded-xl border border-gray-200 p-4"
       >
         <div class="mb-3 flex items-center gap-3">
           <IntegrationLogo
@@ -43,8 +55,9 @@
         <div v-else-if="(resources[integration.id] ?? []).length === 0" class="text-xs text-gray-500">
           Ресурсы не найдены
         </div>
-        <div v-else class="space-y-2">
+        <div v-else class="mt-auto space-y-2">
           <select
+            v-if="integration.provider !== 'keys_so'"
             v-model="selectedResource[integration.id]"
             class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
             @change="onResourceChange(integration)"
@@ -58,6 +71,49 @@
               {{ formatResourceOption(resource) }}
             </option>
           </select>
+          <template v-else>
+            <select
+              v-model="selectedResource[integration.id]"
+              class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+              @change="onResourceChange(integration)"
+            >
+              <option value="">{{ resourceSelectPlaceholder(integration) }}</option>
+              <optgroup
+                v-if="keysSoGroups(integration).monitoring.length"
+                :label="`Мониторинг позиций (${keysSoGroups(integration).monitoring.length})`"
+              >
+                <option
+                  v-for="resource in keysSoGroups(integration).monitoring"
+                  :key="resource.id"
+                  :value="resource.id"
+                >
+                  {{ formatResourceOption(resource) }}
+                </option>
+              </optgroup>
+              <optgroup
+                v-if="keysSoGroups(integration).dashboard.length"
+                :label="`Дашборд — нельзя привязать (${keysSoGroups(integration).dashboard.length})`"
+              >
+                <option
+                  v-for="resource in keysSoGroups(integration).dashboard"
+                  :key="resource.id"
+                  :value="resource.id"
+                  disabled
+                >
+                  {{ formatResourceOption(resource) }}
+                </option>
+              </optgroup>
+            </select>
+            <p class="text-xs text-gray-500">
+              Найдено {{ (resources[integration.id] ?? []).length }} · для привязки доступно
+              {{ keysSoGroups(integration).monitoring.length }}
+              {{ keysSoMonitoringLabel(keysSoGroups(integration).monitoring.length) }}
+            </p>
+          </template>
+          <p v-if="keysSoDomainMismatch(integration)" class="text-xs text-amber-700">
+            {{ projectDomain }} не найден среди проектов мониторинга Keys.so. Создайте проект
+            мониторинга в Keys.so или выберите существующий вручную.
+          </p>
           <select
             v-if="integration.provider === 'topvisor' && topvisorRegionsFor(integration.id).length"
             v-model="selectedRegion[integration.id]"
@@ -105,25 +161,22 @@
         </div>
       </div>
     </div>
-
-    <template #footer>
-      <button
-        type="button"
-        class="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        @click="emit('update:modelValue', false)"
-      >
-        Закрыть
-      </button>
-    </template>
-  </AppModal>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import AppModal from '@/components/AppModal.vue'
 import IntegrationLogo from '@/components/IntegrationLogo.vue'
-import { formatIntegrationResourceOption, formatKeysSoSearchSettingOption, formatTopvisorRegionOption, keysSoSearchSettings, topvisorRegions } from '@/lib/integrationResource'
+import {
+  formatIntegrationResourceOption,
+  formatKeysSoSearchSettingOption,
+  formatTopvisorRegionOption,
+  integrationResourceSupportsBinding,
+  keysSoResourceGroups,
+  keysSoSearchSettings,
+  topvisorRegions,
+} from '@/lib/integrationResource'
 import { useIntegrationsStore } from '@/stores/integrations'
 import { useProjectIntegrationsStore } from '@/stores/projectIntegrations'
 import type { Integration, IntegrationResource } from '@/types'
@@ -131,16 +184,11 @@ import type { AxiosError } from 'axios'
 import type { ApiError } from '@/types'
 
 const props = defineProps<{
-  modelValue: boolean
-  projectId: number | null
-  projectName: string
+  projectId: number
   projectDomain: string | null
 }>()
 
-const emit = defineEmits<{
-  'update:modelValue': [value: boolean]
-  saved: []
-}>()
+const emit = defineEmits<{ saved: [] }>()
 
 const integrationsStore = useIntegrationsStore()
 const bindingsStore = useProjectIntegrationsStore()
@@ -175,10 +223,29 @@ function formatResourceOption(resource: IntegrationResource): string {
 function bindableResources(integration: Integration) {
   const list = resources[integration.id] ?? []
   if (integration.provider === 'keys_so') {
-    return list.filter((resource) => resource.meta?.supports_positions !== false)
+    return list.filter((resource) => integrationResourceSupportsBinding(resource))
   }
 
   return list
+}
+
+function keysSoGroups(integration: Integration) {
+  return keysSoResourceGroups(resources[integration.id] ?? [])
+}
+
+function keysSoMonitoringLabel(count: number): string {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return 'проект мониторинга'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'проекта мониторинга'
+  return 'проектов мониторинга'
+}
+
+function keysSoDomainMismatch(integration: Integration): boolean {
+  if (integration.provider !== 'keys_so' || !props.projectDomain) return false
+  const bindable = bindableResources(integration)
+  if (bindable.length === 0) return false
+  return !bindable.some((resource) => resourceMatchesDomain(props.projectDomain, resource))
 }
 
 function topvisorRegionsFor(integrationId: number) {
@@ -216,12 +283,8 @@ function suggestRegion(integrationId: number) {
   }
 
   const regions = topvisorRegionsFor(integrationId)
-  const yandex = regions.find((region) =>
-    /yandex|яндекс/i.test(region.searcher),
-  )
-  if (yandex) {
-    selectedRegion[integrationId] = String(yandex.index)
-  }
+  const yandex = regions.find((region) => /yandex|яндекс/i.test(region.searcher))
+  if (yandex) selectedRegion[integrationId] = String(yandex.index)
 }
 
 function resourceMatchesDomain(domain: string | null, resource: IntegrationResource): boolean {
@@ -237,6 +300,10 @@ function resourceMatchesDomain(domain: string | null, resource: IntegrationResou
   return candidates.some((c) => c && (c.includes(norm) || norm.includes(c)))
 }
 
+function topvisorRegionCount(resource: IntegrationResource): number {
+  return topvisorRegions(resource).length
+}
+
 function suggestKeysSoSetting(integrationId: number) {
   const binding = currentBinding(integrationId)
   if (binding?.config && typeof binding.config.region_id === 'number') {
@@ -247,13 +314,14 @@ function suggestKeysSoSetting(integrationId: number) {
 
   const settings = keysSoSettingsFor(integrationId)
   const yandex = settings.find((setting) => setting.engine === 0)
-  if (yandex) {
-    selectedKeysSoSetting[integrationId] = `${yandex.region_id}:${yandex.engine}`
-  }
+  if (yandex) selectedKeysSoSetting[integrationId] = `${yandex.region_id}:${yandex.engine}`
 }
 
 function suggestResource(integrationId: number) {
   const binding = currentBinding(integrationId)
+  const integration = integrations.value.find((item) => item.id === integrationId)
+  if (!integration) return
+
   if (binding) {
     selectedResource[integrationId] = binding.external_resource_id
     suggestRegion(integrationId)
@@ -261,8 +329,10 @@ function suggestResource(integrationId: number) {
     return
   }
 
-  const list = resources[integrationId] ?? []
-  const match = list.find((r) => resourceMatchesDomain(props.projectDomain, r))
+  const list = bindableResources(integration)
+  const match = list
+    .filter((r) => resourceMatchesDomain(props.projectDomain, r))
+    .sort((a, b) => topvisorRegionCount(b) - topvisorRegionCount(a))[0]
   if (match) {
     selectedResource[integrationId] = match.id
     suggestRegion(integrationId)
@@ -287,13 +357,13 @@ async function loadResources(integration: Integration) {
 }
 
 async function load() {
-  if (!props.projectId) return
   loading.value = true
   try {
     await integrationsStore.fetchIntegrations()
-    integrations.value = integrationsStore.integrations.filter((i) => i.status === 'active')
+    integrations.value = integrationsStore.integrations.filter(
+      (i) => i.status === 'active' && i.provider !== 'yandex_wordstat',
+    )
     await bindingsStore.fetchBindings(props.projectId)
-
     await Promise.all(integrations.value.map((integration) => loadResources(integration)))
   } finally {
     loading.value = false
@@ -301,11 +371,12 @@ async function load() {
 }
 
 async function save(integration: Integration) {
-  if (!props.projectId || !selectedResource[integration.id]) return
+  if (!selectedResource[integration.id]) return
 
-  const resource = (resources[integration.id] ?? []).find(
+  const resource = bindableResources(integration).find(
     (r) => r.id === selectedResource[integration.id],
   )
+  if (!resource) return
 
   saving.value = integration.id
   try {
@@ -315,10 +386,7 @@ async function save(integration: Integration) {
         : integration.provider === 'keys_so' && selectedKeysSoSetting[integration.id]
           ? (() => {
               const [regionId, engine] = selectedKeysSoSetting[integration.id].split(':')
-              return {
-                region_id: Number(regionId),
-                engine: Number(engine),
-              }
+              return { region_id: Number(regionId), engine: Number(engine) }
             })()
           : undefined
 
@@ -335,7 +403,6 @@ async function save(integration: Integration) {
 }
 
 async function unbind(integrationId: number) {
-  if (!props.projectId) return
   const binding = currentBinding(integrationId)
   if (!binding) return
 
@@ -345,11 +412,10 @@ async function unbind(integrationId: number) {
 }
 
 watch(
-  () => [props.modelValue, props.projectId] as const,
-  ([open, projectId]) => {
-    if (open && projectId) {
-      load()
-    }
+  () => props.projectId,
+  (projectId) => {
+    if (projectId) load()
   },
+  { immediate: true },
 )
 </script>

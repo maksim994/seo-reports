@@ -2,6 +2,7 @@ import keyssoLogo from '@/assets/integrations/keysso.png'
 import topvisorLogo from '@/assets/integrations/topvisor.svg'
 import yandexMetrikaLogo from '@/assets/integrations/yandex-metrika.svg'
 import yandexWebmasterLogo from '@/assets/integrations/yandex-webmaster.svg'
+import yandexWordstatLogo from '@/assets/integrations/yandex-wordstat.svg'
 
 export interface IntegrationBranding {
   logoUrl?: string
@@ -20,6 +21,11 @@ const BRANDING: Record<string, IntegrationBranding> = {
     icon: '🔍',
     logoUrl: yandexWebmasterLogo,
     accentClass: 'bg-amber-50 border-amber-100',
+  },
+  yandex_wordstat: {
+    icon: '📉',
+    logoUrl: yandexWordstatLogo,
+    accentClass: 'bg-violet-50 border-violet-100',
   },
   google_search_console: { icon: '🌐', accentClass: 'bg-blue-50 border-blue-100' },
   topvisor: {

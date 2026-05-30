@@ -141,6 +141,7 @@ const sidebarOpen = ref(false)
 const menuOpen = ref(false)
 
 const navItems = [
+  { to: '/dashboard', label: 'Дашборд', icon: '📈' },
   { to: '/projects', label: 'Мои проекты', icon: '📁' },
   { to: '/integrations', label: 'Источники данных', icon: '🔗' },
   { to: '/templates', label: 'Шаблоны отчётов', icon: '📋' },

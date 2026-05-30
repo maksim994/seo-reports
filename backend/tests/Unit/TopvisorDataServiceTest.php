@@ -77,8 +77,20 @@ class TopvisorDataServiceTest extends TestCase
         Http::fake([
             'api.topvisor.com/*' => Http::response([
                 'result' => [
-                    ['id' => 100, 'name' => 'Active', 'url' => 'active.ru', 'on' => 1, 'searchers' => []],
-                    ['id' => 200, 'name' => 'Archived', 'url' => 'archived.ru', 'on' => 0, 'searchers' => []],
+                    [
+                        'id' => 100,
+                        'name' => 'Active',
+                        'url' => 'active.ru',
+                        'on' => 0,
+                        'searchers' => [
+                            [
+                                'name' => 'Yandex',
+                                'regions' => [['index' => 1, 'areaName' => 'Москва']],
+                            ],
+                        ],
+                    ],
+                    ['id' => 200, 'name' => 'Archived', 'url' => 'archived.ru', 'on' => -1, 'searchers' => []],
+                    ['id' => 300, 'name' => 'Empty', 'url' => 'empty.ru', 'on' => 0, 'searchers' => []],
                 ],
             ]),
         ]);

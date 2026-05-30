@@ -22,6 +22,9 @@ class ReportJob extends Model
         'error_message',
         'started_at',
         'finished_at',
+        'share_token',
+        'share_enabled',
+        'share_expires_at',
     ];
 
     protected function casts(): array
@@ -35,6 +38,8 @@ class ReportJob extends Model
             'options' => 'array',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'share_enabled' => 'boolean',
+            'share_expires_at' => 'datetime',
         ];
     }
 

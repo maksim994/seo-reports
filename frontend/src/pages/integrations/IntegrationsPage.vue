@@ -124,7 +124,7 @@
       <div v-else-if="resourcesError" class="text-sm text-error-500">{{ resourcesError }}</div>
       <ul v-else-if="resourcesList.length" class="max-h-80 space-y-2 overflow-y-auto text-sm">
         <li class="sticky top-0 z-10 bg-white pb-2 text-xs text-gray-500">
-          Найдено: {{ resourcesList.length }}
+          {{ resourcesSummaryText }}
         </li>
         <li
           v-for="resource in resourcesList"
@@ -215,6 +215,7 @@ import {
   integrationResourceHint,
   integrationResourceSubtitle,
   integrationResourceTitle,
+  keysSoResourceGroups,
 } from '@/lib/integrationResource'
 import { integrationLogoUrl } from '@/lib/integrationBranding'
 import { useIntegrationsStore } from '@/stores/integrations'
@@ -241,6 +242,15 @@ const apiKeyForm = ref({ user_id: '', api_key: '' })
 const apiKeyModalTitle = computed(() =>
   apiKeyProvider.value ? `Подключение: ${apiKeyProvider.value.label}` : 'Подключение по API key',
 )
+
+const resourcesSummaryText = computed(() => {
+  if (resourcesIntegration.value?.provider === 'keys_so') {
+    const { monitoring, dashboard } = keysSoResourceGroups(resourcesList.value)
+    return `Мониторинг: ${monitoring.length} · Дашборд: ${dashboard.length} · Всего: ${resourcesList.value.length}`
+  }
+
+  return `Найдено: ${resourcesList.value.length}`
+})
 
 const flashFromQuery = computed(() => ({
   integration: route.query.integration as string | undefined,

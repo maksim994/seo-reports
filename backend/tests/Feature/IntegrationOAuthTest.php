@@ -51,6 +51,45 @@ class IntegrationOAuthTest extends TestCase
         ]);
     }
 
+    public function test_yandex_wordstat_callback_exchanges_code_and_creates_integration(): void
+    {
+        config([
+            'integrations.providers.yandex_wordstat.client_id' => 'test-client',
+            'integrations.providers.yandex_wordstat.client_secret' => 'test-secret',
+            'integrations.providers.yandex_wordstat.redirect_uri' => 'http://localhost/api/integrations/yandex_wordstat/callback',
+        ]);
+
+        Http::fake([
+            'oauth.yandex.ru/token' => Http::response([
+                'access_token' => 'wordstat-access-token',
+                'refresh_token' => 'wordstat-refresh-token',
+                'expires_in' => 3600,
+                'token_type' => 'bearer',
+            ]),
+            'login.yandex.ru/info*' => Http::response([
+                'default_email' => 'wordstat@yandex.ru',
+                'login' => 'wordstat-user',
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+        $state = 'wordstat-state-token';
+        Cache::put('integration_oauth:'.$state, [
+            'user_id' => $user->id,
+            'provider' => 'yandex_wordstat',
+        ], 600);
+
+        $this->get('/api/integrations/yandex_wordstat/callback?code=auth-code&state='.$state)
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('integrations', [
+            'user_id' => $user->id,
+            'provider' => 'yandex_wordstat',
+            'account_label' => 'wordstat@yandex.ru',
+            'status' => 'active',
+        ]);
+    }
+
     public function test_google_callback_exchanges_code_and_creates_integration(): void
     {
         config([

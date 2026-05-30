@@ -8,6 +8,8 @@ use App\Jobs\GenerateReportJob;
 use App\Models\Project;
 use App\Models\ReportJob;
 use App\Models\ReportTemplate;
+use App\Services\ReportPreviewService;
+use App\Services\ReportShareService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -15,6 +17,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
+    public function __construct(
+        private ReportPreviewService $previewService,
+        private ReportShareService $shareService,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
         $jobs = $request->user()
@@ -92,13 +99,10 @@ class ReportController extends Controller
     {
         $this->authorize('view', $reportJob);
 
-        $file = $reportJob->files()->where('format', 'html')->first();
-        if (! $file) {
+        $contents = $this->previewService->htmlContents($reportJob);
+        if ($contents === null) {
             return response()->json(['message' => 'HTML-файл ещё не готов.'], 404);
         }
-
-        $disk = (string) config('reports.storage_disk', 'local');
-        $contents = Storage::disk($disk)->get($file->path);
 
         return response($contents, 200, ['Content-Type' => 'text/html; charset=UTF-8']);
     }
@@ -127,18 +131,45 @@ class ReportController extends Controller
             return response()->json(['message' => 'Unsupported format.'], 422);
         }
 
-        $file = $reportJob->files()->where('format', $format)->first();
-        if (! $file) {
+        if (! $reportJob->files()->where('format', $format)->exists()) {
             return response()->json(['message' => 'Файл ещё не готов.'], 404);
         }
 
-        $disk = (string) config('reports.storage_disk', 'local');
-        $mime = $format === 'pdf' ? 'application/pdf' : 'text/html';
-        $filename = sprintf('report-%d.%s', $reportJob->id, $format);
+        return $this->previewService->download($reportJob, $format);
+    }
 
-        return Storage::disk($disk)->download($file->path, $filename, [
-            'Content-Type' => $mime,
+    public function enableShare(Request $request, ReportJob $reportJob): JsonResponse
+    {
+        $this->authorize('view', $reportJob);
+
+        $validated = $request->validate([
+            'share_expires_at' => ['nullable', 'date', 'after:now'],
         ]);
+
+        $job = $this->shareService->enable(
+            $reportJob,
+            isset($validated['share_expires_at']) ? $validated['share_expires_at'] : null,
+        );
+
+        return response()->json(['data' => $this->serialize($job)]);
+    }
+
+    public function disableShare(Request $request, ReportJob $reportJob): JsonResponse
+    {
+        $this->authorize('view', $reportJob);
+
+        $job = $this->shareService->disable($reportJob);
+
+        return response()->json(['data' => $this->serialize($job)]);
+    }
+
+    public function regenerateShare(Request $request, ReportJob $reportJob): JsonResponse
+    {
+        $this->authorize('view', $reportJob);
+
+        $job = $this->shareService->regenerateToken($reportJob);
+
+        return response()->json(['data' => $this->serialize($job)]);
     }
 
     private function serialize(ReportJob $job): array
@@ -154,6 +185,9 @@ class ReportController extends Controller
             'started_at' => $job->started_at,
             'finished_at' => $job->finished_at,
             'created_at' => $job->created_at,
+            'share_enabled' => (bool) $job->share_enabled,
+            'share_token' => $job->share_enabled ? $job->share_token : null,
+            'share_expires_at' => $job->share_expires_at,
             'project' => $job->relationLoaded('project') ? [
                 'id' => $job->project->id,
                 'name' => $job->project->name,

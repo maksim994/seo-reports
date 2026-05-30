@@ -68,6 +68,12 @@
                 >
                   PDF
                 </a>
+                <button
+                  class="mr-3 text-brand-600 hover:underline"
+                  @click="openShare(report)"
+                >
+                  {{ report.share_enabled ? 'Ссылка ✓' : 'Ссылка' }}
+                </button>
               </template>
               <button
                 class="text-error-500 hover:underline disabled:opacity-50"
@@ -81,6 +87,13 @@
         </tbody>
       </table>
     </div>
+
+    <ReportShareModal
+      v-if="shareReport"
+      v-model="shareOpen"
+      :report="shareReport"
+      @updated="onShareUpdated"
+    />
   </div>
 </template>
 
@@ -88,10 +101,23 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import EmptyState from '@/components/EmptyState.vue'
+import ReportShareModal from '@/components/ReportShareModal.vue'
 import { useReportsStore } from '@/stores/reports'
+import type { ReportJob } from '@/types'
 
 const store = useReportsStore()
 const deletingId = ref<number | null>(null)
+const shareOpen = ref(false)
+const shareReport = ref<ReportJob | null>(null)
+
+function openShare(report: ReportJob) {
+  shareReport.value = report
+  shareOpen.value = true
+}
+
+function onShareUpdated(report: ReportJob) {
+  shareReport.value = report
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ru-RU')

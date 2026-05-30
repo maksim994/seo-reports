@@ -9,6 +9,19 @@
           rows="5"
           class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
         />
+        <select
+          v-else-if="field.type === 'select'"
+          v-model="form[field.key]"
+          class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500"
+        >
+          <option
+            v-for="option in field.options ?? []"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
+        </select>
         <input
           v-else
           v-model="form[field.key]"
