@@ -150,7 +150,13 @@ async function submit() {
   saving.value = true
 
   try {
-    const payload: Record<string, string> = {
+    const payload: {
+      name: string
+      email: string
+      current_password?: string
+      password?: string
+      password_confirmation?: string
+    } = {
       name: form.name,
       email: form.email,
     }
