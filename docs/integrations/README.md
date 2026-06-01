@@ -7,9 +7,9 @@
 | Provider | Auth | Документ |
 |----------|------|----------|
 | `yandex_metrika` | OAuth Yandex | _(TODO)_ |
-| `google_analytics` | OAuth Google | _(TODO)_ |
+| `google_analytics` | OAuth Google | [google-oauth-production.md](./google-oauth-production.md) |
 | `yandex_webmaster` | OAuth Yandex | _(TODO)_ |
-| `google_search_console` | OAuth Google | _(TODO)_ |
+| `google_search_console` | OAuth Google | [google-oauth-production.md](./google-oauth-production.md) |
 | `topvisor` | API key | _(TODO)_ |
 
 ## Фаза 2

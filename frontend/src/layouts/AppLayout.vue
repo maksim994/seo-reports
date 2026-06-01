@@ -97,6 +97,13 @@
             <div class="border-b border-gray-100 px-4 py-2 text-xs text-gray-500">
               {{ auth.user?.name }}
             </div>
+            <RouterLink
+              to="/profile"
+              class="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+              @click="menuOpen = false"
+            >
+              Личный кабинет
+            </RouterLink>
             <button
               class="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
               @click="handleLogout"

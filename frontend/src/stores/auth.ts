@@ -53,6 +53,23 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
+  async function updateProfile(payload: {
+    name: string
+    email: string
+    current_password?: string
+    password?: string
+    password_confirmation?: string
+  }) {
+    loading.value = true
+    try {
+      const { data } = await api.patch<{ user: User; message: string }>('/user/profile', payload)
+      user.value = data.user
+      return data
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     user,
     loading,
@@ -62,5 +79,6 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     login,
     logout,
+    updateProfile,
   }
 })

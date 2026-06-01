@@ -38,6 +38,11 @@
           Зарегистрироваться
         </RouterLink>
       </template>
+      <p class="mt-4 text-xs text-gray-400">
+        <RouterLink to="/privacy" class="hover:text-gray-600">Конфиденциальность</RouterLink>
+        ·
+        <RouterLink to="/terms" class="hover:text-gray-600">Условия</RouterLink>
+      </p>
     </template>
   </AuthLayout>
 </template>

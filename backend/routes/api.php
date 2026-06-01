@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\PublicReportController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectIntegrationController;
 use App\Http\Controllers\Api\PublicSettingsController;
@@ -38,6 +39,7 @@ Route::prefix('public/reports/{token}')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::patch('/user/profile', [ProfileController::class, 'update']);
 
     Route::apiResource('projects', ProjectController::class);
 

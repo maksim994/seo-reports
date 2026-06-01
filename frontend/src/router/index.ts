@@ -24,6 +24,16 @@ const router = createRouter({
       meta: { guest: true },
     },
     {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/pages/legal/PrivacyPolicyPage.vue'),
+    },
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('@/pages/legal/TermsOfServicePage.vue'),
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AppLayout.vue'),
       meta: { requiresAuth: true },
@@ -83,6 +93,11 @@ const router = createRouter({
           path: 'schedules',
           name: 'schedules',
           component: () => import('@/pages/schedules/SchedulesPage.vue'),
+        },
+        {
+          path: 'profile',
+          name: 'profile',
+          component: () => import('@/pages/profile/ProfilePage.vue'),
         },
         {
           path: 'admin/users',

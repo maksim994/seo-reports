@@ -54,6 +54,12 @@
       <RouterLink to="/login" class="font-medium text-brand-600 hover:underline">
         Войти
       </RouterLink>
+      <p class="mt-4 text-xs text-gray-400">
+        Регистрируясь, вы соглашаетесь с
+        <RouterLink to="/terms" class="hover:text-gray-600">Условиями</RouterLink>
+        и
+        <RouterLink to="/privacy" class="hover:text-gray-600">Политикой конфиденциальности</RouterLink>.
+      </p>
     </template>
   </AuthLayout>
 </template>
