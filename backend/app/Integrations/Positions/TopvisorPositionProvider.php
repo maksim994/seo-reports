@@ -49,6 +49,21 @@ class TopvisorPositionProvider implements PositionProviderInterface
         );
     }
 
+    public function fetchTopDistribution(PositionBinding $binding, string $dateFrom, string $dateTo): array
+    {
+        $parsed = $this->parseResourceId($binding->resourceId);
+        $regionIndex = $this->resolveRegionIndex($binding, $parsed['region_index']);
+
+        return $this->topvisor->fetchTopDistribution(
+            $binding->userId,
+            $binding->apiKey,
+            $parsed['project_id'],
+            $regionIndex,
+            $dateFrom,
+            $dateTo,
+        );
+    }
+
     public function fetchPositionsTable(
         PositionBinding $binding,
         string $dateFrom,

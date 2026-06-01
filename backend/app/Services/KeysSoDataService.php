@@ -282,6 +282,197 @@ class KeysSoDataService
         return $rows;
     }
 
+    public function domainFromProject(?string $domain): ?string
+    {
+        $normalized = $this->normalizeDomain($domain ?? '');
+
+        return $normalized !== '' ? $normalized : null;
+    }
+
+    /**
+     * @return array{id: int, name: string, tracking_item: string, search_settings: list<array<string, mixed>>}|null
+     */
+    public function findMonitoringProjectByDomain(string $token, string $domain): ?array
+    {
+        $needle = $this->normalizeDomain($domain);
+        if ($needle === '') {
+            return null;
+        }
+
+        foreach ($this->listMonitoringProjects($token) as $project) {
+            if ($this->normalizeDomain($project['tracking_item']) === $needle) {
+                return $this->enrichMonitoringProject($token, $project);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Сводка «Запросы сайта» — как на дашборде Keys.so (топы + ИИ).
+     *
+     * @return array{
+     *     top1: int,
+     *     top3: int,
+     *     top5: int,
+     *     top10: int,
+     *     top50: int,
+     *     ai_mentions: int,
+     *     keywords: list<array{keyword: string, position: float|null, frequency: float}>
+     * }
+     */
+    public function fetchSiteQueriesDashboard(
+        string $token,
+        string $domain,
+        string $base = 'msk',
+        int $keywordsLimit = 10,
+    ): array {
+        $payload = $this->fetchDomainDashboardPayload($token, $domain, $base);
+
+        return [
+            'top1' => (int) ($payload['it1'] ?? 0),
+            'top3' => (int) ($payload['it3'] ?? 0),
+            'top5' => (int) ($payload['it5'] ?? 0),
+            'top10' => (int) ($payload['it10'] ?? 0),
+            'top50' => (int) ($payload['it50'] ?? 0),
+            'ai_mentions' => (int) ($payload['aiAnswersCnt'] ?? $payload['ai_answers_cnt'] ?? 0),
+            'keywords' => $this->mapDashboardKeywords($payload['keys'] ?? [], $keywordsLimit),
+        ];
+    }
+
+    /**
+     * Сводка «Ссылки» — как на дашборде Keys.so.
+     *
+     * @return array{
+     *     incoming: int,
+     *     outgoing: int,
+     *     dr: int|null,
+     *     referring_domains: int,
+     *     outgoing_domains: int,
+     *     links_by_ip: int,
+     *     anchors: int
+     * }
+     */
+    public function fetchLinksDashboard(string $token, string $domain): array
+    {
+        $normalized = $this->normalizeDomain($domain);
+        $dashboard = $this->fetchDomainDashboardPayload($token, $domain, 'msk');
+
+        return [
+            'incoming' => $this->fetchLinksReportTotal($token, '/report/simple/links/backlinks', $normalized),
+            'outgoing' => $this->fetchLinksReportTotal($token, '/report/simple/links/outlinks', $normalized),
+            'dr' => isset($dashboard['dr']) ? (int) $dashboard['dr'] : null,
+            'referring_domains' => $this->fetchLinksReportTotal($token, '/report/simple/links/backlinks-domains', $normalized),
+            'outgoing_domains' => $this->fetchLinksReportTotal($token, '/report/simple/links/outlinks-domains', $normalized),
+            'links_by_ip' => $this->fetchLinksReportTotal($token, '/report/simple/links/backlinks-ip', $normalized),
+            'anchors' => $this->fetchLinksReportTotal($token, '/report/simple/links/backlinks-anchor', $normalized),
+        ];
+    }
+
+    /**
+     * @return list<array{query: string, answer: string, date: string}>
+     */
+    public function fetchDashboardAiMentions(
+        string $token,
+        string $domain,
+        int $limit = 25,
+    ): array {
+        $normalized = $this->normalizeDomain($domain);
+        $this->waitForAiReport($token, $normalized);
+
+        $payload = $this->requestReport($token, '/report/simple/organic/ai-answers', [
+            'base' => 'msk',
+            'domain' => $normalized,
+            'page' => 1,
+            'per_page' => max(1, min(100, $limit)),
+            'sort' => 'superwsk|desc',
+        ]);
+
+        return collect($payload['data'] ?? [])
+            ->map(fn (array $row) => [
+                'query' => (string) ($row['query_text'] ?? $row['word'] ?? '—'),
+                'answer' => $this->extractAiAnswerText($row),
+                'date' => $this->formatReportDate($row['created_at'] ?? $row['updated_at'] ?? null),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** @param  array<string, mixed>  $row */
+    private function extractAiAnswerText(array $row): string
+    {
+        $raw = $row['ai_answer']
+            ?? $row['ai_content']
+            ?? $row['aiContent']
+            ?? $row['query_answer']
+            ?? '';
+
+        if (is_array($raw)) {
+            $raw = implode("\n", array_map('strval', $raw));
+        }
+
+        $text = $this->htmlToPlainText((string) $raw);
+
+        return $text !== '' ? $this->truncate($text, 500) : '—';
+    }
+
+    private function htmlToPlainText(string $html): string
+    {
+        if (trim($html) === '') {
+            return '';
+        }
+
+        $html = preg_replace('/<br\s*\/?>/i', "\n", $html) ?? $html;
+        $html = preg_replace('/<\/li>/i', "\n", $html) ?? $html;
+        $html = preg_replace('/<\/p>/i', "\n\n", $html) ?? $html;
+        $text = strip_tags($html);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace("/[ \t]+/u", ' ', $text) ?? $text;
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+
+        return trim($text);
+    }
+
+    /** @return array<string, mixed> */
+    private function fetchDomainDashboardPayload(string $token, string $domain, string $base = 'msk'): array
+    {
+        $payload = $this->requestReport($token, '/report/simple/domain_dashboard', [
+            'base' => $base,
+            'domain' => $this->normalizeDomain($domain),
+        ]);
+
+        return is_array($payload) ? $payload : [];
+    }
+
+    private function fetchLinksReportTotal(string $token, string $path, string $domain): int
+    {
+        $payload = $this->requestReport($token, $path, [
+            'domain' => $domain,
+            'page' => 1,
+            'per_page' => 1,
+        ]);
+
+        return (int) ($payload['total'] ?? 0);
+    }
+
+    /**
+     * @param  list<mixed>  $keys
+     * @return list<array{keyword: string, position: float|null, frequency: float}>
+     */
+    private function mapDashboardKeywords(array $keys, int $limit): array
+    {
+        return collect($keys)
+            ->filter(fn ($row) => is_array($row))
+            ->take(max(1, min(50, $limit)))
+            ->map(fn (array $row) => [
+                'keyword' => (string) ($row['word'] ?? '—'),
+                'position' => $this->parsePosition($row['pos'] ?? null),
+                'frequency' => (float) ($row['wsk'] ?? $row['ws'] ?? 0),
+            ])
+            ->values()
+            ->all();
+    }
+
     /** @return array{project_id: int, region_id: int|null, engine: int|null} */
     public function parseBindingResourceId(string $resourceId): array
     {
@@ -338,18 +529,49 @@ class KeysSoDataService
     }
 
     /** @return array<string, mixed> */
-    private function request(string $token, string $method, string $path, array $query = [], bool $cache = true): array
+    private function requestReport(string $token, string $path, array $query): array
     {
+        return $this->request($token, 'get', $path, $query, cache: true, allowAccepted: true);
+    }
+
+    private function waitForAiReport(string $token, string $domain, int $maxAttempts = 12): void
+    {
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            $state = $this->request($token, 'get', '/report/simple/ai-answers/state', [
+                'base' => 'msk',
+                'domain' => $domain,
+            ], cache: false, allowAccepted: true);
+
+            $aiState = (int) ($state['ai_state'] ?? 0);
+            if ($aiState >= 10) {
+                return;
+            }
+
+            sleep(5);
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function request(
+        string $token,
+        string $method,
+        string $path,
+        array $query = [],
+        bool $cache = true,
+        bool $allowAccepted = false,
+    ): array {
         $url = rtrim((string) config('keysso.base_url'), '/').'/'.ltrim($path, '/');
 
-        $fetch = function () use ($token, $method, $url, $query) {
-            for ($attempt = 0; $attempt < 5; $attempt++) {
+        $fetch = function () use ($token, $method, $url, $query, $allowAccepted) {
+            $acceptedPolls = 0;
+
+            for ($attempt = 0; $attempt < 8; $attempt++) {
                 $this->rateLimiter->waitForSlot();
 
                 $pending = Http::withHeaders([
                     'X-Keyso-TOKEN' => $token,
                     'Accept' => 'application/json',
-                ])->timeout(30);
+                ])->timeout(60);
 
                 $response = $method === 'get'
                     ? $pending->get($url, $query)
@@ -363,6 +585,16 @@ class KeysSoDataService
 
                 if ($response->status() === 401) {
                     throw new RuntimeException('Неверный API-токен Keys.so.');
+                }
+
+                if ($allowAccepted && $response->status() === 202) {
+                    $acceptedPolls++;
+                    if ($acceptedPolls >= 15) {
+                        throw new RuntimeException('Keys.so: отчёт не успел построиться за отведённое время.');
+                    }
+                    sleep(5);
+
+                    continue;
                 }
 
                 if (! $response->successful()) {
@@ -573,5 +805,49 @@ class KeysSoDataService
         }
 
         return (float) $value;
+    }
+
+    private function formatReportDate(mixed $value): string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return '—';
+        }
+
+        foreach (['Y-m-d H:i:s', 'Y-m-d', 'd.m.Y H:i:s', 'd.m.Y'] as $format) {
+            $parsed = \DateTimeImmutable::createFromFormat($format, $raw);
+            if ($parsed instanceof \DateTimeImmutable) {
+                return $parsed->format('d.m.Y');
+            }
+        }
+
+        $timestamp = strtotime($raw);
+
+        return $timestamp !== false ? date('d.m.Y', $timestamp) : $raw;
+    }
+
+    private function truncate(string $value, int $length): string
+    {
+        if (mb_strlen($value) <= $length) {
+            return $value;
+        }
+
+        return mb_substr($value, 0, $length - 1).'…';
+    }
+
+    private function absoluteUrl(string $domain, string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            return '';
+        }
+
+        if (preg_match('#^https?://#i', $path)) {
+            return $path;
+        }
+
+        $host = $this->normalizeDomain($domain);
+
+        return 'https://'.$host.'/'.ltrim($path, '/');
     }
 }

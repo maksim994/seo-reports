@@ -7,6 +7,7 @@ use App\Enums\IntegrationProvider;
 use App\ReportBlocks\ReportBlockResult;
 use App\ReportBlocks\ReportRenderContext;
 use App\Services\YandexMetrikaDataService;
+use App\Support\MetrikaBlockSettings;
 use Illuminate\Support\Facades\View;
 use Throwable;
 
@@ -19,6 +20,7 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
         'metrika_daily_visits' => 'Метрика: динамика по дням',
         'metrika_monthly_visits' => 'Метрика: динамика по месяцам',
         'metrika_search_engines' => 'Метрика: поисковые системы',
+        'metrika_search_engines_timeline' => 'Метрика: поисковые системы (динамика)',
         'metrika_organic_daily' => 'Метрика: поисковый трафик по дням',
         'metrika_landing_pages' => 'Метрика: посадочные страницы',
         'metrika_high_bounce' => 'Метрика: страницы с высоким отказом',
@@ -60,6 +62,8 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
         try {
             $periods = $this->periodDates($context);
             [$from, $to] = $periods['current'];
+            $metrikaSettings = MetrikaBlockSettings::resolve($settings, $binding->config ?? []);
+            $goalIds = $metrikaSettings['goal_ids'];
 
             $payload = match ($blockType) {
                 'metrika_devices' => $this->payloadDevices($token, $counterId, $from, $to),
@@ -67,10 +71,11 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
                 'metrika_daily_visits' => $this->payloadDailyVisits($token, $counterId, $from, $to),
                 'metrika_monthly_visits' => $this->payloadMonthlyVisits($token, $counterId, $to),
                 'metrika_search_engines' => $this->payloadSearchEngines($token, $counterId, $from, $to),
+                'metrika_search_engines_timeline' => $this->payloadSearchEnginesTimeline($token, $counterId, $to),
                 'metrika_organic_daily' => $this->payloadOrganicDaily($token, $counterId, $from, $to, $periods['previous']),
                 'metrika_landing_pages' => $this->payloadLandingPages($token, $counterId, $from, $to),
                 'metrika_high_bounce' => $this->payloadHighBounce($token, $counterId, $from, $to),
-                'metrika_conversions_by_source' => $this->payloadConversions($token, $counterId, $from, $to),
+                'metrika_conversions_by_source' => $this->payloadConversions($token, $counterId, $from, $to, $goalIds),
                 default => ['rows' => []],
             };
 
@@ -121,28 +126,29 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
     /** @return array<string, mixed> */
     private function payloadDailyVisits(string $token, string $counterId, string $from, string $to): array
     {
-        $series = $this->metrika->fetchDailyVisits($token, $counterId, $from, $to);
+        $lineSeries = $this->metrika->fetchVisitsTimeSeriesByTrafficSource($token, $counterId, $from, $to);
 
         return [
-            'rows' => $series,
-            'headers' => ['Дата', 'Визиты'],
-            'columns' => ['label', 'value'],
-            'chartType' => 'timeseries',
-            'valueKey' => 'value',
+            'rows' => [],
+            'lineSeries' => $lineSeries,
+            'headers' => [],
+            'columns' => [],
+            'chartType' => 'line_timeseries_multi',
+            'chartOptions' => ['max_points' => 62],
         ];
     }
 
     /** @return array<string, mixed> */
     private function payloadMonthlyVisits(string $token, string $counterId, string $periodEnd): array
     {
-        $series = $this->metrika->fetchMonthlyVisits($token, $counterId, $periodEnd);
+        $lineSeries = $this->metrika->fetchMonthlyVisitsByTrafficSource($token, $counterId, $periodEnd);
 
         return [
-            'rows' => $series,
-            'headers' => ['Месяц', 'Визиты'],
-            'columns' => ['label', 'value'],
-            'chartType' => 'timeseries',
-            'valueKey' => 'value',
+            'rows' => [],
+            'lineSeries' => $lineSeries,
+            'headers' => [],
+            'columns' => [],
+            'chartType' => 'line_timeseries_multi',
             'chartOptions' => ['max_points' => 12],
         ];
     }
@@ -158,6 +164,21 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'columns' => ['label', 'visits', 'users'],
             'chartType' => 'donut_bars',
             'valueKey' => 'visits',
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function payloadSearchEnginesTimeline(string $token, string $counterId, string $periodEnd): array
+    {
+        $lineSeries = $this->metrika->fetchSearchEnginesMonthlyTimeline($token, $counterId, $periodEnd, 13);
+
+        return [
+            'rows' => [],
+            'lineSeries' => $lineSeries,
+            'headers' => [],
+            'columns' => [],
+            'chartType' => 'line_timeseries_multi',
+            'chartOptions' => ['max_points' => 13],
         ];
     }
 
@@ -188,14 +209,17 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
     /** @return array<string, mixed> */
     private function payloadLandingPages(string $token, string $counterId, string $from, string $to): array
     {
-        $rows = $this->metrika->fetchLandingPages($token, $counterId, $from, $to);
+        $rows = $this->metrika->fetchLandingPagesByChannel($token, $counterId, $from, $to);
 
         return [
             'rows' => $rows,
-            'headers' => ['Страница', 'Визиты', 'Пользователи', 'Отказы, %'],
-            'columns' => ['label', 'visits', 'users', 'bounce_rate'],
-            'chartType' => 'bars',
-            'valueKey' => 'visits',
+            'tableMode' => 'by_channel',
+            'channelColumns' => ['visits', 'users', 'bounce_rate'],
+            'channelHeaders' => [
+                'visits' => 'Визиты',
+                'users' => 'Пользователи',
+                'bounce_rate' => 'Отказы, %',
+            ],
             'formatters' => ['bounce_rate' => 'percent'],
         ];
     }
@@ -203,23 +227,24 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
     /** @return array<string, mixed> */
     private function payloadHighBounce(string $token, string $counterId, string $from, string $to): array
     {
-        $rows = $this->metrika->fetchHighBouncePages($token, $counterId, $from, $to);
+        $rows = $this->metrika->fetchHighBouncePagesByChannel($token, $counterId, $from, $to);
 
         return [
             'rows' => $rows,
-            'headers' => ['Страница', 'Визиты', 'Отказы, %'],
-            'columns' => ['label', 'visits', 'bounce_rate'],
-            'chartType' => 'combo',
-            'valueKey' => 'visits',
-            'secondaryKey' => 'bounce_rate',
+            'tableMode' => 'by_channel',
+            'channelColumns' => ['visits', 'bounce_rate'],
+            'channelHeaders' => [
+                'visits' => 'Визиты',
+                'bounce_rate' => 'Отказы, %',
+            ],
             'formatters' => ['bounce_rate' => 'percent'],
         ];
     }
 
     /** @return array<string, mixed> */
-    private function payloadConversions(string $token, string $counterId, string $from, string $to): array
+    private function payloadConversions(string $token, string $counterId, string $from, string $to, ?array $goalIds): array
     {
-        $rows = $this->metrika->fetchConversionsBySource($token, $counterId, $from, $to);
+        $rows = $this->metrika->fetchConversionsBySource($token, $counterId, $from, $to, $goalIds);
 
         return [
             'rows' => $rows,

@@ -111,6 +111,11 @@
         .data-table tr { page-break-inside: avoid; }
         .data-table tr:nth-child(even) td { background: #fcfdff; }
         .block-details { page-break-inside: avoid; }
+        .page-channel-group { margin-bottom: 20px; page-break-inside: avoid; }
+        .page-channel-title { font-size: 14px; margin: 0 0 8px; color: #0f172a; }
+        .page-channel-title a { color: #2563eb; text-decoration: none; word-break: break-all; }
+        .data-table-compact th, .data-table-compact td { padding: 6px 10px; font-size: 12px; }
+        .data-table a { color: #2563eb; text-decoration: none; word-break: break-all; }
         .viz-table-title {
             page-break-after: avoid;
             font-size: 13px;

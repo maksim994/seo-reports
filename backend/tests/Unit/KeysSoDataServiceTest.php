@@ -184,4 +184,109 @@ class KeysSoDataServiceTest extends TestCase
         $this->assertSame(10.0, $rows[0]['previous']);
         $this->assertSame(2.0, $rows[0]['delta']);
     }
+
+    public function test_domain_from_project_strips_protocol_and_www(): void
+    {
+        $service = new KeysSoDataService(new KeysSoRateLimiter);
+
+        $this->assertSame('example.ru', $service->domainFromProject('https://www.example.ru/'));
+        $this->assertNull($service->domainFromProject(''));
+    }
+
+    public function test_find_monitoring_project_by_domain(): void
+    {
+        Http::fake([
+            'api.keys.so/monitoring*' => Http::response([
+                'current_page' => 1,
+                'last_page' => 1,
+                'data' => [
+                    ['id' => 10, 'name' => 'Site', 'trackingItem' => 'www.demo.ru', 'search_settings' => []],
+                ],
+            ]),
+            'api.keys.so/monitoring/10/entity' => Http::response([
+                'id' => 10,
+                'name' => 'Site',
+                'trackingItem' => 'demo.ru',
+                'searchSettings' => [['engine' => 0, 'regionId' => 38]],
+            ]),
+        ]);
+
+        $service = new KeysSoDataService(new KeysSoRateLimiter);
+        $project = $service->findMonitoringProjectByDomain('token', 'https://demo.ru');
+
+        $this->assertNotNull($project);
+        $this->assertSame(10, $project['id']);
+        $this->assertSame('demo.ru', $service->domainFromProject($project['tracking_item']));
+    }
+
+    public function test_fetch_site_queries_dashboard_maps_tops_and_keywords(): void
+    {
+        Http::fake([
+            'api.keys.so/report/simple/domain_dashboard*' => Http::response([
+                'it1' => 109,
+                'it3' => 322,
+                'it5' => 504,
+                'it10' => 1023,
+                'it50' => 4561,
+                'aiAnswersCnt' => 301,
+                'keys' => [
+                    ['word' => 'запрос', 'pos' => 3, 'wsk' => 120],
+                ],
+            ]),
+        ]);
+
+        $service = new KeysSoDataService(new KeysSoRateLimiter);
+        $summary = $service->fetchSiteQueriesDashboard('token', 'demo.ru', 'msk', 5);
+
+        $this->assertSame(109, $summary['top1']);
+        $this->assertSame(301, $summary['ai_mentions']);
+        $this->assertSame('запрос', $summary['keywords'][0]['keyword']);
+    }
+
+    public function test_fetch_links_dashboard_uses_report_totals(): void
+    {
+        Http::fake([
+            'api.keys.so/report/simple/domain_dashboard*' => Http::response(['dr' => 33]),
+            'api.keys.so/report/simple/links/backlinks-anchor*' => Http::response(['total' => 611, 'data' => []]),
+            'api.keys.so/report/simple/links/backlinks-ip*' => Http::response(['total' => 1229, 'data' => []]),
+            'api.keys.so/report/simple/links/backlinks-domains*' => Http::response(['total' => 594, 'data' => []]),
+            'api.keys.so/report/simple/links/outlinks-domains*' => Http::response(['total' => 83, 'data' => []]),
+            'api.keys.so/report/simple/links/outlinks?*' => Http::response(['total' => 7275, 'data' => []]),
+            'api.keys.so/report/simple/links/backlinks?*' => Http::response(['total' => 3640, 'data' => []]),
+        ]);
+
+        $service = new KeysSoDataService(new KeysSoRateLimiter);
+        $summary = $service->fetchLinksDashboard('token', 'demo.ru');
+
+        $this->assertSame(3640, $summary['incoming']);
+        $this->assertSame(7275, $summary['outgoing']);
+        $this->assertSame(33, $summary['dr']);
+        $this->assertSame(611, $summary['anchors']);
+    }
+
+    public function test_fetch_dashboard_ai_mentions_maps_query_and_answer(): void
+    {
+        Http::fake([
+            'api.keys.so/report/simple/ai-answers/state*' => Http::response(['ai_state' => 10]),
+            'api.keys.so/report/simple/organic/ai-answers*' => Http::response([
+                'data' => [
+                    [
+                        'word' => 'методы очистки',
+                        'ai_answer' => '<strong>ЛОС</strong> — локальные очистные сооружения.<br>Некоторые методы очистки сточных вод...',
+                        'created_at' => '2024-12-15',
+                    ],
+                ],
+            ]),
+        ]);
+
+        $service = new KeysSoDataService(new KeysSoRateLimiter);
+        $rows = $service->fetchDashboardAiMentions('token', 'demo.ru', 5);
+
+        $this->assertCount(1, $rows);
+        $this->assertSame('методы очистки', $rows[0]['query']);
+        $this->assertSame('15.12.2024', $rows[0]['date']);
+        $this->assertStringContainsString('ЛОС', $rows[0]['answer']);
+        $this->assertStringContainsString('очистки сточных', $rows[0]['answer']);
+        $this->assertStringNotContainsString('<strong>', $rows[0]['answer']);
+    }
 }

@@ -113,11 +113,12 @@ export interface ReportBlockCatalogItem {
 export interface BlockSettingsField {
   key: string
   label: string
-  type: 'text' | 'textarea' | 'number' | 'select'
-  default?: string | number
+  type: 'text' | 'textarea' | 'number' | 'select' | 'multiselect'
+  default?: string | number | string[]
   min?: number
   max?: number
   options?: Array<{ value: string; label: string }>
+  options_key?: string
 }
 
 export interface TemplateBlockItem {

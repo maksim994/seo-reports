@@ -35,12 +35,17 @@ services:
       dockerfile: docker/Dockerfile
       target: dev
     command: php artisan queue:work --sleep=3 --tries=3
+    restart: unless-stopped
     volumes:
       - ./backend:/var/www/backend
       - backend_vendor:/var/www/backend/vendor
     depends_on:
-      - app
-      - redis
+      app:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - seo-reports
 

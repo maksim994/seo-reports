@@ -1,7 +1,7 @@
 @php
     $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
     $valueKey = $valueKey ?? 'visits';
-    $chartItems = collect($rows)->map(fn (array $row) => [
+    $chartItems = collect($rows ?? [])->map(fn (array $row) => [
         'label' => $row['label'] ?? '—',
         'value' => (float) ($row[$valueKey] ?? 0),
     ])->all();
@@ -12,20 +12,28 @@
     $comparison = null;
     $combo = null;
     $chartOptions = $chartOptions ?? [];
+    $chartType = $chartType ?? '';
+    $tableMode = $tableMode ?? 'flat';
 
-    if (($chartType ?? '') === 'donut_bars' && !empty($chartItems)) {
+    if ($chartType === 'donut_bars' && !empty($chartItems)) {
         $donut = $charts->donutChart($chartItems, ['title' => 'Структура', 'center_label' => 'Всего']);
         $bars = $charts->horizontalBarChart($chartItems, ['title' => 'Топ', 'show_share' => false]);
-    } elseif (($chartType ?? '') === 'bars' && !empty($chartItems)) {
+    } elseif ($chartType === 'bars' && !empty($chartItems)) {
         $bars = $charts->horizontalBarChart($chartItems, ['title' => 'Топ', 'show_share' => true]);
-    } elseif (($chartType ?? '') === 'timeseries' && !empty($rows)) {
-        $timeseries = $charts->timeSeriesChart($chartItems, array_merge(['title' => 'Динамика'], $chartOptions));
-    } elseif (($chartType ?? '') === 'timeseries_compare' && !empty($rows)) {
-        $timeseries = $charts->timeSeriesChart($chartItems, ['title' => 'Текущий период']);
+    } elseif ($chartType === 'timeseries' && !empty($rows)) {
+        $timeseries = $charts->timeSeriesChart($chartItems, array_merge(['title' => 'Динамика', 'chart_kind' => 'line'], $chartOptions));
+    } elseif ($chartType === 'line_timeseries_multi' && !empty($lineSeries['categories'] ?? null)) {
+        $timeseries = $charts->multiSeriesLineChart(
+            $lineSeries['categories'],
+            $lineSeries['series'] ?? [],
+            array_merge(['title' => 'Динамика по каналам'], $chartOptions),
+        );
+    } elseif ($chartType === 'timeseries_compare' && !empty($rows)) {
+        $timeseries = $charts->timeSeriesChart($chartItems, ['title' => 'Текущий период', 'chart_kind' => 'line']);
         if (!empty($previousSeries)) {
-            $comparison = $charts->timeSeriesChart($previousSeries, ['title' => 'Сравниваемый период']);
+            $comparison = $charts->timeSeriesChart($previousSeries, ['title' => 'Сравниваемый период', 'chart_kind' => 'line']);
         }
-    } elseif (($chartType ?? '') === 'combo' && !empty($rows)) {
+    } elseif ($chartType === 'combo' && !empty($rows)) {
         $comboItems = collect($rows)->map(fn (array $row) => [
             'label' => $row['label'] ?? '—',
             'primary' => (float) ($row[$valueKey] ?? 0),
@@ -55,33 +63,58 @@
     <h2>{{ $title }}</h2>
     <p class="muted">Счётчик: {{ $counterLabel }}</p>
 
-    @if (empty($rows))
+    @php
+        $hasLineChart = !empty($lineSeries['categories'] ?? []) && !empty($lineSeries['series'] ?? []);
+        $hasTableRows = !empty($rows);
+    @endphp
+    @if (!$hasLineChart && !$hasTableRows)
         <div class="alert">Нет данных за выбранный период.</div>
     @else
-        @include('reports.blocks.partials.visualization', compact('donut', 'bars', 'timeseries', 'comparison', 'combo'))
+        @if ($tableMode !== 'by_channel')
+            @include('reports.blocks.partials.visualization', compact('donut', 'bars', 'timeseries', 'comparison', 'combo'))
 
-        @if (!empty($donut) || !empty($bars) || !empty($timeseries) || !empty($comparison) || !empty($combo))
-            <h3 class="viz-table-title">Детализация</h3>
+            @if (!empty($donut) || !empty($bars) || !empty($timeseries) || !empty($comparison) || !empty($combo))
+                <h3 class="viz-table-title">Детализация</h3>
+            @endif
+        @elseif (!empty($timeseries))
+            @include('reports.blocks.partials.visualization', compact('timeseries'))
+            <h3 class="viz-table-title">Детализация по каналам</h3>
         @endif
-        <div class="block-details">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        @foreach ($headers as $header)
-                            <th>{{ $header }}</th>
-                        @endforeach
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($rows as $row)
+
+        @if ($tableMode === 'by_channel')
+            @include('reports.blocks.partials.metrika_pages_by_channel', [
+                'rows' => $rows,
+                'channelColumns' => $channelColumns,
+                'channelHeaders' => $channelHeaders,
+                'formatters' => $formatters,
+            ])
+        @else
+            <div class="block-details">
+                <table class="data-table">
+                    <thead>
                         <tr>
-                            @foreach ($columns as $column)
-                                <td>{{ $formatCell($column, $row[$column] ?? '—') }}</td>
+                            @foreach ($headers as $header)
+                                <th>{{ $header }}</th>
                             @endforeach
                         </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        @foreach ($rows as $row)
+                            <tr>
+                                @foreach ($columns as $column)
+                                    <td>
+                                        @if (($linkColumn ?? null) === $column && !empty($row['url'] ?? null))
+                                            <a href="{{ $row['url'] }}" target="_blank" rel="noopener noreferrer">{{ $formatCell($column, $row[$column] ?? $row['label'] ?? '—') }}</a>
+                                        @else
+                                            {{ $formatCell($column, $row[$column] ?? '—') }}
+                                        @endif
+                                    </td>
+                                @endforeach
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
     @endif
 </div>

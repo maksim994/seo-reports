@@ -8,6 +8,9 @@ use App\Enums\IntegrationProvider;
 use App\Models\ProjectIntegration;
 use App\ReportBlocks\ReportBlockResult;
 use App\ReportBlocks\ReportRenderContext;
+use App\Enums\IntegrationStatus;
+use App\Models\Integration;
+use App\Services\KeysSoDataService;
 use App\Services\PositionProviderRegistry;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
@@ -28,7 +31,10 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
         'positions_table' => 'Позиции: таблица ключей',
     ];
 
-    public function __construct(private PositionProviderRegistry $positions) {}
+    public function __construct(
+        private PositionProviderRegistry $positions,
+        private KeysSoDataService $keysSo,
+    ) {}
 
     public function type(): string
     {
@@ -96,6 +102,11 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
                 );
             }
 
+            $topDistribution = null;
+            if ($blockType === 'positions_top_distribution' && $providerEnum === IntegrationProvider::Topvisor) {
+                $topDistribution = $provider->fetchTopDistribution($positionBinding, $from, $to);
+            }
+
             $rows = $blockType === 'positions_table'
                 ? $provider->fetchPositionsTable(
                     $positionBinding,
@@ -116,6 +127,7 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
                 'resourceLabel' => $binding->external_resource_label ?? $resourceId,
                 'summary' => $summary,
                 'previousSummary' => $previousSummary,
+                'topDistribution' => $topDistribution,
                 'rows' => $rows,
             ])->render();
 
@@ -151,6 +163,15 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
     private function resolvePositionContext(ReportRenderContext $context): ?array
     {
         foreach (self::POSITION_PROVIDERS as $provider) {
+            if ($provider === IntegrationProvider::KeysSo) {
+                $binding = $this->resolveKeysSoPositionBinding($context);
+                if ($binding) {
+                    return [$provider, $binding];
+                }
+
+                continue;
+            }
+
             $resolved = $this->resolveBinding($context, $provider);
             if ($resolved) {
                 return [$provider, $resolved[1]];
@@ -158,6 +179,50 @@ class PositionsExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
         }
 
         return null;
+    }
+
+    private function resolveKeysSoPositionBinding(ReportRenderContext $context): ?ProjectIntegration
+    {
+        $binding = $context->bindingFor(IntegrationProvider::KeysSo->value);
+        if ($binding?->external_resource_id) {
+            return $binding;
+        }
+
+        $context->project->loadMissing('user.integrations');
+        $integration = $context->project->user->integrations
+            ->first(fn (Integration $item) => $item->provider === IntegrationProvider::KeysSo
+                && $item->status === IntegrationStatus::Active);
+
+        if (! $integration) {
+            return null;
+        }
+
+        $token = (string) ($integration->credentials['api_token'] ?? $integration->credentials['access_token'] ?? '');
+        $domain = $this->keysSo->domainFromProject($context->project->domain);
+        if ($token === '' || ! $domain) {
+            return null;
+        }
+
+        $project = $this->keysSo->findMonitoringProjectByDomain($token, $domain);
+        if (! $project) {
+            return null;
+        }
+
+        $searchSettings = $this->keysSo->resolveSearchSettings($project['search_settings']);
+        $resourceId = (string) $project['id'].':'.$searchSettings['regionId'].':'.$searchSettings['engine'];
+
+        $virtual = new ProjectIntegration([
+            'integration_id' => $integration->id,
+            'external_resource_id' => $resourceId,
+            'external_resource_label' => $project['name'].' · '.$project['tracking_item'],
+            'config' => [
+                'region_id' => $searchSettings['regionId'],
+                'engine' => $searchSettings['engine'],
+            ],
+        ]);
+        $virtual->setRelation('integration', $integration);
+
+        return $virtual;
     }
 
     protected function blockTitle(): string

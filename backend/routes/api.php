@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\PublicReportController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectIntegrationController;
+use App\Http\Controllers\Api\ProjectMetrikaController;
 use App\Http\Controllers\Api\PublicSettingsController;
 use App\Http\Controllers\Api\ReportAssetController;
 use App\Http\Controllers\Api\ReportController;
@@ -58,6 +59,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/projects/{project}/integrations', [ProjectIntegrationController::class, 'index']);
     Route::post('/projects/{project}/integrations', [ProjectIntegrationController::class, 'store']);
     Route::delete('/projects/{project}/integrations/{projectIntegration}', [ProjectIntegrationController::class, 'destroy']);
+    Route::get('/projects/{project}/metrika/options', [ProjectMetrikaController::class, 'goals']);
 
     Route::get('/report-blocks/catalog', [ReportBlockCatalogController::class, 'index']);
     Route::post('/templates/{template}/logo', [ReportTemplateController::class, 'uploadLogo']);

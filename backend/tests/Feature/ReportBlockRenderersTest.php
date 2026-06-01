@@ -281,8 +281,9 @@ class ReportBlockRenderersTest extends TestCase
             ]),
             'api.webmaster.yandex.net/v4/user' => Http::response(['user_id' => 1]),
             'api.webmaster.yandex.net/v4/user/*/hosts/*/search-queries/all/history*' => Http::response([
-                'history' => [
-                    ['indicators' => ['TOTAL_SHOWS' => 1000, 'TOTAL_CLICKS' => 40]],
+                'indicators' => [
+                    'TOTAL_SHOWS' => [['date' => '2026-04-01T00:00:00.000+03:00', 'value' => 1000]],
+                    'TOTAL_CLICKS' => [['date' => '2026-04-01T00:00:00.000+03:00', 'value' => 40]],
                 ],
             ]),
         ]);

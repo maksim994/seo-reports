@@ -1,5 +1,21 @@
 <?php
 
+$metrikaGoalIdsField = [
+    'key' => 'goal_ids',
+    'label' => 'Цели в отчёте',
+    'type' => 'multiselect',
+    'default' => [],
+    'options_key' => 'metrika_goals',
+];
+
+$metrikaTrafficSourceField = [
+    'key' => 'traffic_source',
+    'label' => 'Канал конверсии',
+    'type' => 'select',
+    'default' => '',
+    'options_key' => 'metrika_traffic_sources',
+];
+
 return [
     'blocks' => [
         [
@@ -47,6 +63,10 @@ return [
             'label' => 'Метрика: цели',
             'description' => 'Достижение целей и конверсии',
             'required_integration' => 'yandex_metrika',
+            'settings_schema' => [
+                $metrikaGoalIdsField,
+                $metrikaTrafficSourceField,
+            ],
         ],
         [
             'block_type' => 'metrika_devices',
@@ -84,6 +104,13 @@ return [
             'required_integration' => 'yandex_metrika',
         ],
         [
+            'block_type' => 'metrika_search_engines_timeline',
+            'category' => 'yandex_metrika',
+            'label' => 'Метрика: ПС — динамика 13 мес.',
+            'description' => 'Органический трафик по поисковым системам за год и месяц до конца отчёта',
+            'required_integration' => 'yandex_metrika',
+        ],
+        [
             'block_type' => 'metrika_organic_daily',
             'category' => 'yandex_metrika',
             'label' => 'Метрика: поисковый трафик по дням',
@@ -110,6 +137,9 @@ return [
             'label' => 'Метрика: конверсии по каналам',
             'description' => 'Достижения целей по источникам трафика',
             'required_integration' => 'yandex_metrika',
+            'settings_schema' => [
+                $metrikaGoalIdsField,
+            ],
         ],
         [
             'block_type' => 'ga_overview',
@@ -192,7 +222,7 @@ return [
             'block_type' => 'webmaster_indexing_history',
             'category' => 'yandex_webmaster',
             'label' => 'Вебмастер: история индексации',
-            'description' => 'Количество страниц в поиске Яндекса',
+            'description' => 'Динамика проиндексированных страниц (HTTP 2xx)',
             'required_integration' => 'yandex_webmaster',
         ],
         [
@@ -241,7 +271,7 @@ return [
             'block_type' => 'positions_top_distribution',
             'category' => 'positions',
             'label' => 'Позиции: TOP-N',
-            'description' => 'Распределение ключей по TOP-3/10/30/100',
+            'description' => 'Распределение по ТОПам (1–3, 1–10, 11–30, 31–50, 51–100, 100+) с долей и динамикой',
             'required_integration' => null,
         ],
         [
@@ -252,6 +282,46 @@ return [
             'required_integration' => null,
             'settings_schema' => [
                 ['key' => 'limit', 'label' => 'Количество ключей', 'type' => 'number', 'default' => 50, 'min' => 1, 'max' => 200],
+            ],
+        ],
+        [
+            'block_type' => 'keys_so_site_queries',
+            'category' => 'keys_so',
+            'label' => 'Keys.so: запросы сайта',
+            'description' => 'Сводка по запросам сайта (топы и ИИ) и превью органической выдачи, как в дашборде Keys.so',
+            'required_integration' => 'keys_so',
+            'settings_schema' => [
+                [
+                    'key' => 'base',
+                    'label' => 'Региональная база',
+                    'type' => 'select',
+                    'default' => 'msk',
+                    'options' => [
+                        ['value' => 'msk', 'label' => 'Яндекс: Москва'],
+                        ['value' => 'spb', 'label' => 'Яндекс: Санкт-Петербург'],
+                        ['value' => 'gru', 'label' => 'Google: Москва'],
+                        ['value' => 'gny', 'label' => 'Google: New York'],
+                    ],
+                ],
+                ['key' => 'limit', 'label' => 'Запросов в таблице «Органическая выдача»', 'type' => 'number', 'default' => 10, 'min' => 1, 'max' => 50],
+            ],
+        ],
+        [
+            'block_type' => 'keys_so_links',
+            'category' => 'keys_so',
+            'label' => 'Keys.so: ссылки',
+            'description' => 'Сводка по ссылочному профилю домена, как в дашборде Keys.so',
+            'required_integration' => 'keys_so',
+            'settings_schema' => [],
+        ],
+        [
+            'block_type' => 'keys_so_ai_mentions',
+            'category' => 'keys_so',
+            'label' => 'Keys.so: упоминания в ИИ',
+            'description' => 'Запросы, по которым сайт упоминается в ИИ-ответах Яндекса',
+            'required_integration' => 'keys_so',
+            'settings_schema' => [
+                ['key' => 'limit', 'label' => 'Количество строк', 'type' => 'number', 'default' => 25, 'min' => 1, 'max' => 100],
             ],
         ],
     ],
@@ -265,6 +335,7 @@ return [
         'yandex_wordstat' => 'Яндекс Вордстат',
         'cross_analytics' => 'Сводная аналитика',
         'positions' => 'Позиции (Topvisor)',
+        'keys_so' => 'Keys.so',
     ],
 
     'default_template' => [

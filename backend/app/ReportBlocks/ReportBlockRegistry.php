@@ -33,6 +33,7 @@ class ReportBlockRegistry
         Renderers\SearchCompareBlockRenderer $searchCompare,
         Renderers\WorkPerformedBlockRenderer $workPerformed,
         Renderers\PositionsExtendedBlockRenderer $positionsExtended,
+        Renderers\KeysSoExtendedBlockRenderer $keysSoExtended,
         Renderers\UnavailableBlockRenderer $unavailable,
     ) {
         $this->renderers = [];
@@ -55,6 +56,7 @@ class ReportBlockRegistry
             $searchCompare,
             $workPerformed,
             $positionsExtended,
+            $keysSoExtended,
             $unavailable,
         ] as $renderer) {
             $this->registerRenderer($this->renderers, $renderer);

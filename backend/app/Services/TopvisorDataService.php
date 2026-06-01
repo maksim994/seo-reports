@@ -104,6 +104,69 @@ class TopvisorDataService
         return $first;
     }
 
+    /** @var list<array{key: string, label: string}> */
+    private const TOP_RANGES = [
+        ['key' => '1_3', 'label' => '1–3'],
+        ['key' => '1_10', 'label' => '1–10'],
+        ['key' => '11_30', 'label' => '11–30'],
+        ['key' => '31_50', 'label' => '31–50'],
+        ['key' => '51_100', 'label' => '51–100'],
+        ['key' => '101_10000', 'label' => '100+'],
+    ];
+
+    /**
+     * Распределение по ТОПам как в интерфейсе Topvisor (доля, количество, динамика).
+     *
+     * @return array{
+     *     ranges: list<array{label: string, count: int, percent: int|null, delta: int|null}>,
+     *     check_dates: array{0: string, 1: string}|null
+     * }
+     */
+    public function fetchTopDistribution(
+        string $userId,
+        string $apiKey,
+        int $projectId,
+        int $regionIndex,
+        string $dateFrom,
+        string $dateTo,
+    ): array {
+        $response = $this->request($userId, $apiKey, 'get', 'positions_2', 'summary', [
+            'project_id' => $projectId,
+            'region_index' => $regionIndex,
+            'dates' => [$dateFrom, $dateTo],
+            'show_tops' => 1,
+            'show_dynamics' => 1,
+        ]);
+
+        $result = $response['result'] ?? [];
+        $topsSeries = $this->normalizeTopsSeries($result['tops'] ?? []);
+        $previous = $topsSeries[0] ?? [];
+        $latest = $topsSeries[count($topsSeries) - 1] ?? [];
+        $totalKeywords = $this->fetchKeywordCount($userId, $apiKey, $projectId);
+        $checkDates = $this->formatCheckDates($result['dates'] ?? null);
+
+        $ranges = [];
+        foreach (self::TOP_RANGES as $definition) {
+            $key = $definition['key'];
+            $count = (int) ($latest[$key] ?? 0);
+            $delta = count($topsSeries) > 1
+                ? $count - (int) ($previous[$key] ?? 0)
+                : null;
+
+            $ranges[] = [
+                'label' => $definition['label'],
+                'count' => $count,
+                'percent' => $totalKeywords > 0 ? (int) round(100 * $count / $totalKeywords) : null,
+                'delta' => $delta,
+            ];
+        }
+
+        return [
+            'ranges' => $ranges,
+            'check_dates' => $checkDates,
+        ];
+    }
+
     /** @return array{visibility: float|null, visibility_dynamic: float|null, tops: array<string, int>, avg: float|null} */
     public function fetchSummary(
         string $userId,
@@ -124,18 +187,30 @@ class TopvisorDataService
         ]);
 
         $result = $response['result'] ?? [];
+        $latest = $this->latestTopsSnapshot($result['tops'] ?? []);
 
         return [
-            'visibility' => isset($result['visibility']) ? (float) $result['visibility'] : null,
+            'visibility' => $this->latestMetric($result['visibilities'] ?? null, $result['visibility'] ?? null),
             'visibility_dynamic' => isset($result['visibility_dynamic']) ? (float) $result['visibility_dynamic'] : null,
             'tops' => [
-                'top3' => (int) ($result['tops']['top3'] ?? $result['top3'] ?? 0),
-                'top10' => (int) ($result['tops']['top10'] ?? $result['top10'] ?? 0),
-                'top30' => (int) ($result['tops']['top30'] ?? $result['top30'] ?? 0),
-                'top100' => (int) ($result['tops']['top100'] ?? $result['top100'] ?? 0),
+                'top3' => (int) ($latest['1_3'] ?? 0),
+                'top10' => (int) ($latest['1_10'] ?? 0),
+                'top30' => (int) ($latest['11_30'] ?? 0),
+                'top100' => (int) ($latest['51_100'] ?? 0) + (int) ($latest['101_10000'] ?? 0),
             ],
-            'avg' => isset($result['avg']) ? (float) $result['avg'] : null,
+            'avg' => $this->latestMetric($result['avgs'] ?? null, $result['avg'] ?? null),
         ];
+    }
+
+    public function fetchKeywordCount(string $userId, string $apiKey, int $projectId): int
+    {
+        $response = $this->request($userId, $apiKey, 'get', 'keywords_2', 'keywords', [
+            'project_id' => $projectId,
+            'limit' => 1,
+            'fields' => ['id'],
+        ]);
+
+        return max(0, (int) ($response['total'] ?? 0));
     }
 
     /** @return list<array{keyword: string, position: float|null, previous: float|null, delta: float|null}> */
@@ -270,6 +345,76 @@ class TopvisorDataService
         }
 
         return (float) $value;
+    }
+
+    /** @return list<array<string, int>> */
+    private function normalizeTopsSeries(mixed $tops): array
+    {
+        if (! is_array($tops) || $tops === []) {
+            return [];
+        }
+
+        if (array_is_list($tops)) {
+            return array_values(array_filter($tops, fn ($item) => is_array($item)));
+        }
+
+        return [$tops];
+    }
+
+    /** @return array<string, int> */
+    private function latestTopsSnapshot(mixed $tops): array
+    {
+        $series = $this->normalizeTopsSeries($tops);
+
+        return $series[count($series) - 1] ?? [];
+    }
+
+    private function latestMetric(mixed $series, mixed $scalar): ?float
+    {
+        if (is_array($series) && $series !== []) {
+            $values = array_values($series);
+            $last = $values[count($values) - 1] ?? null;
+
+            return $last !== null && $last !== '' ? (float) $last : null;
+        }
+
+        return $scalar !== null && $scalar !== '' ? (float) $scalar : null;
+    }
+
+    /** @return array{0: string, 1: string}|null */
+    private function formatCheckDates(mixed $dates): ?array
+    {
+        if (! is_array($dates) || count($dates) < 2) {
+            return null;
+        }
+
+        $from = $this->formatReportDate($dates[0]);
+        $to = $this->formatReportDate($dates[1]);
+
+        if ($from === '—' || $to === '—') {
+            return null;
+        }
+
+        return [$from, $to];
+    }
+
+    private function formatReportDate(mixed $value): string
+    {
+        $raw = trim((string) ($value ?? ''));
+        if ($raw === '') {
+            return '—';
+        }
+
+        foreach (['Y-m-d H:i:s', 'Y-m-d', 'd.m.Y'] as $format) {
+            $parsed = \DateTimeImmutable::createFromFormat($format, $raw);
+            if ($parsed instanceof \DateTimeImmutable) {
+                return $parsed->format('d.m.Y');
+            }
+        }
+
+        $timestamp = strtotime($raw);
+
+        return $timestamp !== false ? date('d.m.Y', $timestamp) : $raw;
     }
 
     /** @param  array{id: int, on: int, regions: list<array<string, mixed>>}  $project */

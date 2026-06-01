@@ -6,6 +6,7 @@ use App\Enums\IntegrationProvider;
 use App\ReportBlocks\ReportBlockResult;
 use App\ReportBlocks\ReportRenderContext;
 use App\Services\YandexMetrikaDataService;
+use App\Support\MetrikaBlockSettings;
 use Illuminate\Support\Facades\View;
 use Throwable;
 
@@ -38,11 +39,14 @@ class MetrikaGoalsBlockRenderer extends AbstractIntegrationBlockRenderer
 
         try {
             $periods = $this->periodDates($context);
+            $resolved = MetrikaBlockSettings::resolve($settings, $binding->config ?? []);
             $rows = $this->metrika->fetchGoals(
                 $token,
                 $counterId,
                 $periods['current'][0],
                 $periods['current'][1],
+                $resolved['goal_ids'],
+                $resolved['traffic_source'],
             );
 
             $html = View::make('reports.blocks.metrika_goals', [

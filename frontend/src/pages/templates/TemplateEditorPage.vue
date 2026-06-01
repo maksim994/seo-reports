@@ -212,6 +212,8 @@
       :title="settingsModalTitle"
       :schema="settingsModalSchema"
       :settings="settingsModalSettings"
+      :dynamic-options="metrikaDynamicOptions"
+      :options-hint="metrikaOptionsHint"
       @save="saveBlockSettings"
     />
 
@@ -230,12 +232,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import BlockSettingsModal from '@/components/BlockSettingsModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { ensureCsrfCookie } from '@/lib/api'
+import api, { ensureCsrfCookie } from '@/lib/api'
+import { useProjectsStore } from '@/stores/projects'
 import { useTemplatesStore } from '@/stores/templates'
 import type { BlockSettingsField, ReportTemplate, TemplateBlockItem } from '@/types'
 
 const route = useRoute()
 const store = useTemplatesStore()
+const projectsStore = useProjectsStore()
 
 const templateId = computed(() => Number(route.params.id))
 const loading = ref(true)
@@ -253,6 +257,8 @@ let sortable: Sortable | null = null
 
 const settingsModalOpen = ref(false)
 const settingsBlockIndex = ref(-1)
+const metrikaDynamicOptions = ref<Record<string, Array<{ value: string; label: string }>>>({})
+const metrikaOptionsHint = ref<string | null>(null)
 
 const logoPreviewUrl = computed(() => {
   if (!template.value?.logo_url) return null
@@ -337,8 +343,42 @@ function moveBlock(index: number, direction: number) {
   selectedBlocks.value = copy
 }
 
-function openBlockSettings(index: number) {
+async function loadMetrikaBlockOptions(blockType: string) {
+  metrikaDynamicOptions.value = {}
+  metrikaOptionsHint.value = null
+
+  if (!blockSchema(blockType).some((f) => f.options_key?.startsWith('metrika_'))) {
+    return
+  }
+
+  await projectsStore.fetchProjects(true)
+  const project = projectsStore.projects.find((p) => p.has_analytics)
+  if (!project) {
+    metrikaOptionsHint.value =
+      'Подключите Яндекс.Метрику к любому проекту — список целей подгрузится автоматически.'
+    return
+  }
+
+  try {
+    const { data } = await api.get<{ data: { goals: Array<{ value: string; label: string }>; traffic_sources: Array<{ value: string; label: string }> } }>(
+      `/projects/${project.id}/metrika/options`,
+    )
+    metrikaDynamicOptions.value = {
+      metrika_goals: data.data.goals,
+      metrika_traffic_sources: data.data.traffic_sources,
+    }
+    metrikaOptionsHint.value = `Цели загружены из проекта «${project.name}».`
+  } catch {
+    metrikaOptionsHint.value = 'Не удалось загрузить цели Метрики.'
+  }
+}
+
+async function openBlockSettings(index: number) {
   settingsBlockIndex.value = index
+  const block = selectedBlocks.value[index]
+  if (block) {
+    await loadMetrikaBlockOptions(block.block_type)
+  }
   settingsModalOpen.value = true
 }
 

@@ -8,10 +8,6 @@
         'title' => 'Структура трафика',
         'center_label' => 'Визиты',
     ]);
-    $bars = $charts->horizontalBarChart($chartItems, [
-        'title' => 'Топ источников',
-        'show_share' => false,
-    ]);
 @endphp
 <div>
     <h2>Яндекс.Метрика — источники трафика</h2>
@@ -20,9 +16,9 @@
     @if (empty($rows))
         <div class="alert">Нет данных за выбранный период.</div>
     @else
-        @include('reports.blocks.partials.visualization', compact('donut', 'bars'))
+        @include('reports.blocks.partials.visualization', ['donut' => $donut])
 
-        @if (!empty($donut) || !empty($bars))
+        @if (!empty($donut))
             <h3 class="viz-table-title">Детализация</h3>
         @endif
         <div class="block-details">

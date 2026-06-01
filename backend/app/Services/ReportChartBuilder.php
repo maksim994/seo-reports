@@ -275,6 +275,7 @@ class ReportChartBuilder
         $title = (string) ($options['title'] ?? '');
         $valueSuffix = (string) ($options['value_suffix'] ?? '');
         $maxPoints = (int) ($options['max_points'] ?? 31);
+        $chartKind = (string) ($options['chart_kind'] ?? 'line');
 
         $points = array_slice($points, 0, $maxPoints);
         if ($points === []) {
@@ -284,12 +285,24 @@ class ReportChartBuilder
         $labels = array_map(fn (array $point) => $this->truncate((string) $point['label'], 12), $points);
         $values = array_map(fn (array $point) => round((float) $point['value'], 2), $points);
 
-        return $this->apexChart('area', [
+        $config = [
             'chart' => ['height' => 280],
             'series' => [['name' => trim($title) !== '' ? $title : 'Значение', 'data' => $values]],
             'xaxis' => ['categories' => $labels],
-            'stroke' => ['curve' => 'smooth', 'width' => 3],
-            'fill' => [
+            'stroke' => ['curve' => 'smooth', 'width' => $chartKind === 'line' ? 2 : 3],
+            'dataLabels' => ['enabled' => false],
+            'markers' => ['size' => $chartKind === 'line' ? 3 : 0, 'hover' => ['size' => 5]],
+            'tooltip' => [
+                'customMeta' => [
+                    'suffix' => $valueSuffix,
+                ],
+            ],
+        ];
+
+        if ($chartKind === 'line') {
+            $config['colors'] = ['#2563EB'];
+        } else {
+            $config['fill'] = [
                 'type' => 'gradient',
                 'gradient' => [
                     'shadeIntensity' => 0.35,
@@ -297,14 +310,49 @@ class ReportChartBuilder
                     'opacityTo' => 0.05,
                     'stops' => [0, 90, 100],
                 ],
-            ],
-            'colors' => ['#2563EB'],
+            ];
+            $config['colors'] = ['#2563EB'];
+        }
+
+        return $this->apexChart($chartKind === 'line' ? 'line' : 'area', $config, $title, 'timeseries wide');
+    }
+
+    /**
+     * @param  list<string>  $categories
+     * @param  list<array{name: string, data: list<float>}>  $series
+     */
+    public function multiSeriesLineChart(array $categories, array $series, array $options = []): string
+    {
+        $title = (string) ($options['title'] ?? '');
+        $maxPoints = (int) ($options['max_points'] ?? 31);
+
+        $categories = array_slice($categories, 0, $maxPoints);
+        if ($categories === [] || $series === []) {
+            return '';
+        }
+
+        $apexSeries = [];
+        foreach ($series as $item) {
+            $apexSeries[] = [
+                'name' => $this->truncate((string) ($item['name'] ?? '—'), 28),
+                'data' => array_slice(array_map(fn ($v) => round((float) $v, 2), $item['data'] ?? []), 0, $maxPoints),
+            ];
+        }
+
+        if ($this->forPdf) {
+            return $this->legacyMultiSeriesLineChart($categories, $apexSeries, $title);
+        }
+
+        return $this->apexChart('line', [
+            'chart' => ['height' => 320],
+            'series' => $apexSeries,
+            'xaxis' => ['categories' => array_map(fn (string $c) => $this->truncate($c, 12), $categories)],
+            'stroke' => ['curve' => 'smooth', 'width' => 2],
             'dataLabels' => ['enabled' => false],
-            'markers' => ['size' => 0, 'hover' => ['size' => 5]],
-            'tooltip' => [
-                'customMeta' => [
-                    'suffix' => $valueSuffix,
-                ],
+            'markers' => ['size' => 0, 'hover' => ['size' => 4]],
+            'legend' => [
+                'position' => 'bottom',
+                'horizontalAlign' => 'center',
             ],
         ], $title, 'timeseries wide');
     }
@@ -559,6 +607,31 @@ class ReportChartBuilder
     /**
      * @param  list<array{label: string, value: float}>  $points
      */
+    /**
+     * @param  list<string>  $categories
+     * @param  list<array{name: string, data: list<float>}>  $series
+     */
+    private function legacyMultiSeriesLineChart(array $categories, array $series, string $title = ''): string
+    {
+        $rows = '';
+        foreach ($series as $index => $item) {
+            $color = self::COLORS[$index % count(self::COLORS)];
+            $total = array_sum($item['data']);
+            $rows .= '<tr>'
+                .'<td class="legend-swatch" bgcolor="'.$color.'"></td>'
+                .'<td class="legend-label">'.e($item['name']).'</td>'
+                .'<td class="legend-value">'.e($this->formatNumber($total).' визитов').'</td>'
+                .'</tr>';
+        }
+
+        $html = ($title !== '' ? '<div class="chart-title">'.e($title).'</div>' : '')
+            .'<table class="share-legend" width="100%">'.$rows.'</table>'
+            .'<p class="muted" style="margin-top:8px">'.e(implode(' · ', array_slice($categories, 0, 6))
+                .(count($categories) > 6 ? ' …' : '')).'</p>';
+
+        return $this->wrapChart($html, 'timeseries wide');
+    }
+
     private function legacyTimeSeriesChart(array $points, array $options = []): string
     {
         $title = (string) ($options['title'] ?? '');

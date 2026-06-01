@@ -124,17 +124,45 @@ class YandexMetrikaDataService
         return $name ?: ($id ?: '—');
     }
 
+    /** @return list<array{id: int, name: string}> */
+    public function listGoals(string $accessToken, string $counterId): array
+    {
+        return $this->listActiveGoals($accessToken, $counterId);
+    }
+
     /** @return list<array{label: string, reaches: float, conversion: float}> */
     public function fetchGoals(
         string $accessToken,
         string $counterId,
         string $dateFrom,
         string $dateTo,
+        ?array $goalIds = null,
+        ?string $trafficSource = null,
         int $limit = 10,
     ): array {
         $goals = $this->listActiveGoals($accessToken, $counterId);
         if ($goals === []) {
             return [];
+        }
+
+        if ($goalIds !== null) {
+            $goals = array_values(array_filter(
+                $goals,
+                fn (array $goal) => in_array($goal['id'], $goalIds, true),
+            ));
+        }
+
+        if ($goals === []) {
+            return [];
+        }
+
+        $queryParams = [
+            'ids' => $counterId,
+            'date1' => $dateFrom,
+            'date2' => $dateTo,
+        ];
+        if ($trafficSource !== null) {
+            $queryParams['filters'] = "ym:s:lastTrafficSource=='{$trafficSource}'";
         }
 
         $rows = [];
@@ -145,17 +173,13 @@ class YandexMetrikaDataService
                 $metrics[] = "ym:s:goal{$goal['id']}conversionRate";
             }
 
+            $params = array_merge($queryParams, ['metrics' => implode(',', $metrics)]);
             $payload = ReportFetch::remember(
-                'metrika.goals.metrics.'.sha1($accessToken.'|'.$counterId.'|'.$dateFrom.'|'.$dateTo.'|'.implode(',', array_column($chunk, 'id'))),
-                function () use ($accessToken, $counterId, $dateFrom, $dateTo, $metrics) {
+                'metrika.goals.metrics.'.sha1($accessToken.'|'.$counterId.'|'.$dateFrom.'|'.$dateTo.'|'.json_encode($params)),
+                function () use ($accessToken, $params) {
                     $response = Http::withHeaders([
                         'Authorization' => 'OAuth '.$accessToken,
-                    ])->get('https://api-metrika.yandex.net/stat/v1/data', [
-                        'ids' => $counterId,
-                        'metrics' => implode(',', $metrics),
-                        'date1' => $dateFrom,
-                        'date2' => $dateTo,
-                    ]);
+                    ])->get('https://api-metrika.yandex.net/stat/v1/data', $params);
 
                     if (! $response->successful()) {
                         throw new RuntimeException('Metrika API error: '.$response->body());
@@ -274,6 +298,36 @@ class YandexMetrikaDataService
         );
     }
 
+    /**
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>}
+     */
+    public function fetchVisitsTimeSeriesByTrafficSource(
+        string $accessToken,
+        string $counterId,
+        string $dateFrom,
+        string $dateTo,
+        string $timeDimension = 'ym:s:date',
+        int $maxSources = 8,
+    ): array {
+        $dateFormatter = $timeDimension === 'ym:s:month'
+            ? fn (string $label) => $this->formatMonthLabel($label)
+            : fn (string $label) => $this->formatDayLabel($label);
+
+        return $this->pivotDateSourceSeries(
+            $this->statRequest($accessToken, [
+                'ids' => $counterId,
+                'dimensions' => $timeDimension.',ym:s:lastTrafficSource',
+                'metrics' => 'ym:s:visits',
+                'date1' => $dateFrom,
+                'date2' => $dateTo,
+                'sort' => $timeDimension,
+                'limit' => 10000,
+            ]),
+            $dateFormatter,
+            $maxSources,
+        );
+    }
+
     /** @return list<array{label: string, value: float}> */
     public function fetchMonthlyVisits(
         string $accessToken,
@@ -281,20 +335,46 @@ class YandexMetrikaDataService
         string $periodEnd,
         int $months = 12,
     ): array {
-        $end = \Carbon\Carbon::parse($periodEnd)->startOfMonth();
-        $start = $end->copy()->subMonths($months - 1);
+        $range = $this->monthRange($periodEnd, $months);
 
         return $this->mapTimeSeries(
             $this->statRequest($accessToken, [
                 'ids' => $counterId,
                 'dimensions' => 'ym:s:month',
                 'metrics' => 'ym:s:visits',
-                'date1' => $start->format('Y-m-d'),
-                'date2' => $end->copy()->endOfMonth()->format('Y-m-d'),
+                'date1' => $range['from'],
+                'date2' => $range['to'],
                 'sort' => 'ym:s:month',
                 'limit' => $months,
             ]),
             fn (string $label) => $this->formatMonthLabel($label),
+        );
+    }
+
+    /**
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>}
+     */
+    public function fetchMonthlyVisitsByTrafficSource(
+        string $accessToken,
+        string $counterId,
+        string $periodEnd,
+        int $months = 12,
+        int $maxSources = 8,
+    ): array {
+        $range = $this->monthRange($periodEnd, $months);
+
+        return $this->pivotDateSourceSeries(
+            $this->statRequest($accessToken, [
+                'ids' => $counterId,
+                'dimensions' => 'ym:s:month,ym:s:lastTrafficSource',
+                'metrics' => 'ym:s:visits',
+                'date1' => $range['from'],
+                'date2' => $range['to'],
+                'sort' => 'ym:s:month',
+                'limit' => 10000,
+            ]),
+            fn (string $label) => $this->formatMonthLabel($label),
+            $maxSources,
         );
     }
 
@@ -391,28 +471,96 @@ class YandexMetrikaDataService
         );
     }
 
+    /**
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>}
+     */
+    public function fetchSearchEnginesMonthlyTimeline(
+        string $accessToken,
+        string $counterId,
+        string $periodEnd,
+        int $months = 13,
+        int $maxEngines = 8,
+    ): array {
+        $range = $this->monthRange($periodEnd, $months);
+
+        $matrix = [];
+        $monthKeys = [];
+
+        foreach ($this->statRequest($accessToken, [
+            'ids' => $counterId,
+            'dimensions' => 'ym:s:month,ym:s:searchEngine',
+            'metrics' => 'ym:s:visits',
+            'date1' => $range['from'],
+            'date2' => $range['to'],
+            'filters' => "ym:s:lastTrafficSource=='organic'",
+            'sort' => 'ym:s:month',
+            'limit' => 10000,
+        ])['data'] ?? [] as $row) {
+            $dims = $row['dimensions'] ?? [];
+            $monthRaw = (string) ($dims[0]['name'] ?? $dims[0]['id'] ?? '');
+            $engine = (string) ($dims[1]['name'] ?? $dims[1]['id'] ?? '—');
+            $visits = (float) ($row['metrics'][0] ?? 0);
+
+            if ($monthRaw === '') {
+                continue;
+            }
+
+            $monthKeys[$monthRaw] = true;
+            $matrix[$engine][$monthRaw] = ($matrix[$engine][$monthRaw] ?? 0) + $visits;
+        }
+
+        $sortedMonths = array_keys($monthKeys);
+        sort($sortedMonths);
+        $categories = array_map(fn (string $m) => $this->formatMonthLabel($m), $sortedMonths);
+
+        $totals = [];
+        foreach ($matrix as $engine => $byMonth) {
+            $totals[$engine] = array_sum($byMonth);
+        }
+        arsort($totals);
+        $engines = array_slice(array_keys($totals), 0, $maxEngines);
+
+        $series = [];
+        foreach ($engines as $engine) {
+            $data = [];
+            foreach ($sortedMonths as $monthRaw) {
+                $data[] = round((float) ($matrix[$engine][$monthRaw] ?? 0), 2);
+            }
+            $series[] = ['name' => $engine, 'data' => $data];
+        }
+
+        return ['categories' => $categories, 'series' => $series];
+    }
+
     /** @return list<array{label: string, conversions: float, visits: float, conversion_rate: float}> */
     public function fetchConversionsBySource(
         string $accessToken,
         string $counterId,
         string $dateFrom,
         string $dateTo,
+        ?array $goalIds = null,
         int $limit = 10,
     ): array {
+        $metrics = $this->conversionMetrics($goalIds);
+
         return collect($this->statRequest($accessToken, [
             'ids' => $counterId,
             'dimensions' => 'ym:s:lastTrafficSource',
-            'metrics' => 'ym:s:sumGoalReachesAny,ym:s:visits',
+            'metrics' => implode(',', $metrics).',ym:s:visits',
             'date1' => $dateFrom,
             'date2' => $dateTo,
-            'sort' => '-ym:s:sumGoalReachesAny',
+            'sort' => '-'.($metrics[0]),
             'limit' => $limit,
         ])['data'] ?? [])
-            ->map(function (array $row) {
+            ->map(function (array $row) use ($goalIds) {
                 $dims = $row['dimensions'] ?? [];
                 $metrics = $row['metrics'] ?? [];
-                $conversions = (float) ($metrics[0] ?? 0);
-                $visits = (float) ($metrics[1] ?? 0);
+                $goalCount = count($this->conversionMetrics($goalIds));
+                $conversions = 0.0;
+                for ($i = 0; $i < $goalCount; $i++) {
+                    $conversions += (float) ($metrics[$i] ?? 0);
+                }
+                $visits = (float) ($metrics[$goalCount] ?? 0);
 
                 return [
                     'label' => $this->translateTrafficSource(
@@ -426,6 +574,63 @@ class YandexMetrikaDataService
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * @return list<array{url: string, label: string, channels: list<array{label: string, visits: float, users: float, bounce_rate: float}>}>
+     */
+    public function fetchLandingPagesByChannel(
+        string $accessToken,
+        string $counterId,
+        string $dateFrom,
+        string $dateTo,
+        int $pageLimit = 15,
+        int $channelLimit = 8,
+    ): array {
+        return $this->groupPageRowsByChannel(
+            $this->statRequest($accessToken, [
+                'ids' => $counterId,
+                'dimensions' => 'ym:s:startURL,ym:s:lastTrafficSource',
+                'metrics' => 'ym:s:visits,ym:s:users,ym:s:bounceRate',
+                'date1' => $dateFrom,
+                'date2' => $dateTo,
+                'sort' => '-ym:s:visits',
+                'limit' => 10000,
+            ]),
+            ['visits', 'users', 'bounce_rate'],
+            $pageLimit,
+            $channelLimit,
+        );
+    }
+
+    /**
+     * @return list<array{url: string, label: string, channels: list<array{label: string, visits: float, bounce_rate: float}>}>
+     */
+    public function fetchHighBouncePagesByChannel(
+        string $accessToken,
+        string $counterId,
+        string $dateFrom,
+        string $dateTo,
+        int $pageLimit = 10,
+        int $channelLimit = 8,
+        int $minVisits = 10,
+    ): array {
+        return $this->groupPageRowsByChannel(
+            $this->statRequest($accessToken, [
+                'ids' => $counterId,
+                'dimensions' => 'ym:s:startURL,ym:s:lastTrafficSource',
+                'metrics' => 'ym:s:visits,ym:s:bounceRate',
+                'date1' => $dateFrom,
+                'date2' => $dateTo,
+                'filters' => "ym:s:visits>={$minVisits}",
+                'sort' => '-ym:s:bounceRate',
+                'limit' => 10000,
+            ]),
+            ['visits', 'bounce_rate'],
+            $pageLimit,
+            $channelLimit,
+            sortBy: 'bounce_rate',
+        );
     }
 
     /** @param  list<string>  $metricKeys */
@@ -569,5 +774,138 @@ class YandexMetrikaDataService
         }
 
         return mb_substr($url, 0, 71).'…';
+    }
+
+    /** @return array{from: string, to: string} */
+    private function monthRange(string $periodEnd, int $months): array
+    {
+        $end = \Carbon\Carbon::parse($periodEnd)->startOfMonth();
+
+        return [
+            'from' => $end->copy()->subMonths($months - 1)->format('Y-m-d'),
+            'to' => $end->copy()->endOfMonth()->format('Y-m-d'),
+        ];
+    }
+
+    /** @return list<string> */
+    private function conversionMetrics(?array $goalIds): array
+    {
+        if ($goalIds === null || $goalIds === []) {
+            return ['ym:s:sumGoalReachesAny'];
+        }
+
+        return array_map(fn (int $id) => "ym:s:goal{$id}reaches", $goalIds);
+    }
+
+    /**
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>}
+     */
+    private function pivotDateSourceSeries(
+        array $payload,
+        callable $dateFormatter,
+        int $maxSources,
+    ): array {
+        $matrix = [];
+        $dateKeys = [];
+
+        foreach ($payload['data'] ?? [] as $row) {
+            $dims = $row['dimensions'] ?? [];
+            $dateRaw = (string) ($dims[0]['name'] ?? $dims[0]['id'] ?? '');
+            $sourceId = isset($dims[1]['id']) ? (string) $dims[1]['id'] : null;
+            $sourceName = isset($dims[1]['name']) ? (string) $dims[1]['name'] : null;
+            $sourceLabel = $this->translateTrafficSource($sourceId, $sourceName);
+            $visits = (float) ($row['metrics'][0] ?? 0);
+
+            if ($dateRaw === '') {
+                continue;
+            }
+
+            $dateKeys[$dateRaw] = true;
+            $matrix[$sourceLabel][$dateRaw] = ($matrix[$sourceLabel][$dateRaw] ?? 0) + $visits;
+        }
+
+        $sortedDates = array_keys($dateKeys);
+        sort($sortedDates);
+        $categories = array_map(fn (string $d) => $dateFormatter($d), $sortedDates);
+
+        $totals = [];
+        foreach ($matrix as $source => $byDate) {
+            $totals[$source] = array_sum($byDate);
+        }
+        arsort($totals);
+        $sources = array_slice(array_keys($totals), 0, $maxSources);
+
+        $series = [];
+        foreach ($sources as $source) {
+            $data = [];
+            foreach ($sortedDates as $dateRaw) {
+                $data[] = round((float) ($matrix[$source][$dateRaw] ?? 0), 2);
+            }
+            $series[] = ['name' => $source, 'data' => $data];
+        }
+
+        return ['categories' => $categories, 'series' => $series];
+    }
+
+    /**
+     * @param  list<string>  $metricKeys
+     * @return list<array{url: string, label: string, channels: list<array<string, mixed>}>}
+     */
+    private function groupPageRowsByChannel(
+        array $payload,
+        array $metricKeys,
+        int $pageLimit,
+        int $channelLimit,
+        string $sortBy = 'visits',
+    ): array {
+        $pages = [];
+
+        foreach ($payload['data'] ?? [] as $row) {
+            $dims = $row['dimensions'] ?? [];
+            $metrics = $row['metrics'] ?? [];
+            $url = (string) ($dims[0]['name'] ?? $dims[0]['id'] ?? '—');
+            $channel = $this->translateTrafficSource(
+                isset($dims[1]['id']) ? (string) $dims[1]['id'] : null,
+                isset($dims[1]['name']) ? (string) $dims[1]['name'] : null,
+            );
+
+            $channelRow = ['label' => $channel];
+            foreach ($metricKeys as $index => $key) {
+                $channelRow[$key] = (float) ($metrics[$index] ?? 0);
+            }
+
+            if (! isset($pages[$url])) {
+                $pages[$url] = [
+                    'url' => $url,
+                    'label' => $this->truncateUrl($url),
+                    'channels' => [],
+                    '_total' => 0.0,
+                ];
+            }
+
+            $pages[$url]['channels'][] = $channelRow;
+            $pages[$url]['_total'] += (float) ($channelRow['visits'] ?? 0);
+        }
+
+        $result = collect($pages)
+            ->sortByDesc('_total')
+            ->take($pageLimit)
+            ->map(function (array $page) use ($channelLimit, $sortBy) {
+                $channels = collect($page['channels'])
+                    ->sortByDesc($sortBy)
+                    ->take($channelLimit)
+                    ->values()
+                    ->all();
+
+                return [
+                    'url' => $page['url'],
+                    'label' => $page['label'],
+                    'channels' => $channels,
+                ];
+            })
+            ->values()
+            ->all();
+
+        return $result;
     }
 }

@@ -220,4 +220,119 @@ class Phase15BlocksTest extends TestCase
         $this->assertTrue($result->success);
         $this->assertStringContainsString('40.0', $result->html);
     }
+
+    public function test_keys_so_site_queries_block_uses_user_token_and_project_domain(): void
+    {
+        Http::fake([
+            'api.keys.so/report/simple/domain_dashboard*' => Http::response([
+                'it1' => 10,
+                'it3' => 20,
+                'it5' => 30,
+                'it10' => 40,
+                'it50' => 50,
+                'aiAnswersCnt' => 5,
+                'keys' => [
+                    ['word' => 'купить плитку', 'pos' => 5, 'wsk' => 300],
+                ],
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+        $project = Project::factory()->for($user)->create(['domain' => 'https://demo.ru']);
+        Integration::create([
+            'user_id' => $user->id,
+            'provider' => IntegrationProvider::KeysSo,
+            'credentials' => ['api_token' => 'secret'],
+            'status' => 'active',
+        ]);
+
+        $template = ReportTemplate::create(['user_id' => $user->id, 'name' => 'Tpl']);
+        $job = \App\Models\ReportJob::create([
+            'user_id' => $user->id,
+            'project_id' => $project->id,
+            'report_template_id' => $template->id,
+            'status' => ReportJobStatus::Queued,
+            'period_start' => '2026-04-01',
+            'period_end' => '2026-04-30',
+        ]);
+
+        $context = new ReportRenderContext(
+            $project->load('user.integrations'),
+            $template,
+            $job,
+            collect(),
+            app(ReportBlockCatalog::class),
+        );
+
+        $result = app(ReportBlockRegistry::class)->render('keys_so_site_queries', $context, ['base' => 'msk', 'limit' => 10]);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('В топ 1', $result->html);
+        $this->assertStringContainsString('купить плитку', $result->html);
+        $this->assertStringContainsString('demo.ru', $result->html);
+    }
+
+    public function test_positions_visibility_auto_resolves_keys_so_by_domain(): void
+    {
+        Http::fake([
+            'api.keys.so/monitoring/146/report-chart*' => Http::response([
+                'data' => [
+                    '2026-04-30' => [
+                        'it3_organic' => 1,
+                        'it10_organic' => 4,
+                        'it50_organic' => 6,
+                        'it100_organic' => 8,
+                        'total_words' => 10,
+                        'day_avg_organic_pos' => 11.2,
+                    ],
+                ],
+            ]),
+            'api.keys.so/monitoring*' => Http::response([
+                'current_page' => 1,
+                'last_page' => 1,
+                'data' => [
+                    [
+                        'id' => 146,
+                        'name' => 'Demo',
+                        'trackingItem' => 'demo.ru',
+                        'search_settings' => [
+                            ['search_engine' => 0, 'region_id' => 38, 'region_name' => 'Москва'],
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+        $project = Project::factory()->for($user)->create(['domain' => 'https://www.demo.ru']);
+        Integration::create([
+            'user_id' => $user->id,
+            'provider' => IntegrationProvider::KeysSo,
+            'credentials' => ['api_token' => 'secret'],
+            'status' => 'active',
+        ]);
+
+        $template = ReportTemplate::create(['user_id' => $user->id, 'name' => 'Tpl']);
+        $job = \App\Models\ReportJob::create([
+            'user_id' => $user->id,
+            'project_id' => $project->id,
+            'report_template_id' => $template->id,
+            'status' => ReportJobStatus::Queued,
+            'period_start' => '2026-04-01',
+            'period_end' => '2026-04-30',
+        ]);
+
+        $context = new ReportRenderContext(
+            $project->load('user.integrations'),
+            $template,
+            $job,
+            collect(),
+            app(ReportBlockCatalog::class),
+        );
+
+        $result = app(ReportBlockRegistry::class)->render('positions_visibility', $context, null);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('40.0', $result->html);
+    }
 }

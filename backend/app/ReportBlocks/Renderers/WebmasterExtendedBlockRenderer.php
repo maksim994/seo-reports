@@ -83,13 +83,16 @@ class WebmasterExtendedBlockRenderer extends AbstractIntegrationBlockRenderer im
                     'title' => $title,
                     'hostLabel' => $binding->external_resource_label ?? $hostId,
                     'series' => $series,
-                    'valueLabel' => $blockType === 'webmaster_sqi_history' ? 'ИКС' : 'Страниц в поиске',
+                    'valueLabel' => $blockType === 'webmaster_sqi_history' ? 'ИКС' : 'Страниц (HTTP 2xx)',
                 ])->render();
             }
 
             return new ReportBlockResult($html, $title);
-        } catch (Throwable) {
-            return $this->unavailable('Данные Вебмастера временно недоступны', $title);
+        } catch (Throwable $exception) {
+            return $this->unavailable(
+                YandexWebmasterDataService::friendlyErrorMessage($exception),
+                $title,
+            );
         }
     }
 
