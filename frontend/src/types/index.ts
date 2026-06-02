@@ -179,24 +179,14 @@ export interface PublicReportMeta {
 export interface DashboardMetrikaMetrics {
   visits: number
   users: number
+  bounce_rate: number
   visits_change_pct: number | null
+  users_change_pct: number | null
 }
 
-export interface DashboardSearchMetrics {
-  source: 'google_search_console' | 'yandex_webmaster'
-  clicks: number
-  impressions: number
-  ctr: number
-  position?: number
-  clicks_change_pct: number | null
-}
-
-export interface DashboardPositionMetrics {
-  provider: string
-  visibility: number | null
-  visibility_dynamic: number | null
-  top10: number | null
-  avg_position: number | null
+export interface DashboardProjectSummary {
+  work_items_count: number
+  integrations_count: number
 }
 
 export interface DashboardProjectRow {
@@ -207,9 +197,8 @@ export interface DashboardProjectRow {
   integrations: string[]
   metrics: {
     metrika: DashboardMetrikaMetrics | null
-    search: DashboardSearchMetrics | null
-    positions: DashboardPositionMetrics | null
   }
+  summary: DashboardProjectSummary
   last_report: {
     id: number
     period_start: string

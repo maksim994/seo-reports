@@ -52,6 +52,10 @@ class DashboardTest extends TestCase
             ->assertJsonPath('data.period.end', '2026-04-30')
             ->assertJsonPath('data.projects.0.name', 'Client Site')
             ->assertJsonPath('data.projects.0.metrics.metrika.visits', 1000)
+            ->assertJsonPath('data.projects.0.metrics.metrika.users', 800)
+            ->assertJsonPath('data.projects.0.metrics.metrika.bounce_rate', 25.5)
+            ->assertJsonPath('data.projects.0.summary.work_items_count', 0)
+            ->assertJsonPath('data.projects.0.summary.integrations_count', 1)
             ->assertJsonCount(1, 'data.projects');
     }
 

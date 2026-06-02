@@ -2,13 +2,13 @@
 
 namespace App\Services;
 
-use App\DataTransferObjects\PositionBinding;
 use App\Enums\IntegrationProvider;
 use App\Enums\IntegrationStatus;
 use App\Enums\ReportJobStatus;
 use App\Models\Project;
 use App\Models\ProjectIntegration;
 use App\Models\User;
+use App\Models\WorkItem;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -16,17 +16,8 @@ use Throwable;
 
 class PortfolioDashboardService
 {
-    /** @var list<IntegrationProvider> */
-    private const POSITION_PROVIDERS = [
-        IntegrationProvider::Topvisor,
-        IntegrationProvider::KeysSo,
-    ];
-
     public function __construct(
         private YandexMetrikaDataService $metrika,
-        private GoogleSearchConsoleDataService $gsc,
-        private YandexWebmasterDataService $webmaster,
-        private PositionProviderRegistry $positions,
     ) {}
 
     /** @return array<string, mixed> */
@@ -45,6 +36,11 @@ class PortfolioDashboardService
             ->get();
 
         $lastReports = $this->loadLastReports($user, $projects);
+        $workItemCounts = $this->loadWorkItemCounts(
+            $projects->pluck('id')->all(),
+            $dateFrom,
+            $dateTo,
+        );
 
         return [
             'period' => [
@@ -61,6 +57,7 @@ class PortfolioDashboardService
                 $compareFrom,
                 $compareTo,
                 $lastReports,
+                $workItemCounts,
             ) {
                 return $this->buildProjectRow(
                     $project,
@@ -69,6 +66,7 @@ class PortfolioDashboardService
                     $compareFrom,
                     $compareTo,
                     $lastReports->get($project->id),
+                    (int) ($workItemCounts[$project->id] ?? 0),
                 );
             })->values()->all(),
         ];
@@ -86,6 +84,26 @@ class PortfolioDashboardService
         $compareStart = $compareEnd->copy()->startOfMonth();
 
         return [$periodStart, $periodEnd, $compareStart, $compareEnd];
+    }
+
+    /**
+     * @param  list<int>  $projectIds
+     * @return array<int, int>
+     */
+    private function loadWorkItemCounts(array $projectIds, string $dateFrom, string $dateTo): array
+    {
+        if ($projectIds === []) {
+            return [];
+        }
+
+        return WorkItem::query()
+            ->whereIn('project_id', $projectIds)
+            ->whereBetween('work_date', [$dateFrom, $dateTo])
+            ->groupBy('project_id')
+            ->selectRaw('project_id, count(*) as aggregate')
+            ->pluck('aggregate', 'project_id')
+            ->map(fn ($count) => (int) $count)
+            ->all();
     }
 
     /** @return Collection<int, \App\Models\ReportJob|null> */
@@ -115,6 +133,7 @@ class PortfolioDashboardService
         string $compareFrom,
         string $compareTo,
         ?\App\Models\ReportJob $lastReport,
+        int $workItemsCount,
     ): array {
         $bindings = $project->projectIntegrations->keyBy(
             fn (ProjectIntegration $binding) => $binding->integration?->provider->value ?? '',
@@ -146,8 +165,10 @@ class PortfolioDashboardService
             'integrations' => array_values(array_unique($integrations)),
             'metrics' => [
                 'metrika' => $this->fetchMetrikaMetrics($bindings, $dateFrom, $dateTo, $compareFrom, $compareTo, $errors),
-                'search' => $this->fetchSearchMetrics($bindings, $dateFrom, $dateTo, $compareFrom, $compareTo, $errors),
-                'positions' => $this->fetchPositionMetrics($bindings, $dateFrom, $dateTo, $errors),
+            ],
+            'summary' => [
+                'work_items_count' => $workItemsCount,
+                'integrations_count' => count($integrations),
             ],
             'last_report' => $lastReport ? [
                 'id' => $lastReport->id,
@@ -190,7 +211,9 @@ class PortfolioDashboardService
             return [
                 'visits' => $current['visits'],
                 'users' => $current['users'],
+                'bounce_rate' => $current['bounce_rate'],
                 'visits_change_pct' => $this->changePercent($current['visits'], $previous['visits'] ?? null),
+                'users_change_pct' => $this->changePercent($current['users'], $previous['users'] ?? null),
             ];
         } catch (Throwable $e) {
             Log::warning('Dashboard metrika fetch failed', ['message' => $e->getMessage()]);
@@ -198,165 +221,6 @@ class PortfolioDashboardService
 
             return null;
         }
-    }
-
-    /** @param  Collection<string, ProjectIntegration>  $bindings */
-    private function fetchSearchMetrics(
-        Collection $bindings,
-        string $dateFrom,
-        string $dateTo,
-        string $compareFrom,
-        string $compareTo,
-        array &$errors,
-    ): ?array {
-        $gscBinding = $bindings->get(IntegrationProvider::GoogleSearchConsole->value);
-        if ($gscBinding?->integration) {
-            return $this->fetchGscMetrics($gscBinding, $dateFrom, $dateTo, $compareFrom, $compareTo, $errors);
-        }
-
-        $webmasterBinding = $bindings->get(IntegrationProvider::YandexWebmaster->value);
-        if ($webmasterBinding?->integration) {
-            return $this->fetchWebmasterMetrics($webmasterBinding, $dateFrom, $dateTo, $compareFrom, $compareTo, $errors);
-        }
-
-        return null;
-    }
-
-    private function fetchGscMetrics(
-        ProjectIntegration $binding,
-        string $dateFrom,
-        string $dateTo,
-        string $compareFrom,
-        string $compareTo,
-        array &$errors,
-    ): ?array {
-        $token = (string) ($binding->integration->credentials['access_token'] ?? '');
-        $siteUrl = (string) $binding->external_resource_id;
-        if ($token === '' || $siteUrl === '') {
-            return null;
-        }
-
-        try {
-            $current = $this->gsc->fetchPerformanceSummary($token, $siteUrl, $dateFrom, $dateTo);
-            $previous = $this->gsc->fetchPerformanceSummary($token, $siteUrl, $compareFrom, $compareTo);
-
-            if ($current === null) {
-                return null;
-            }
-
-            return [
-                'source' => 'google_search_console',
-                'clicks' => $current['clicks'],
-                'impressions' => $current['impressions'],
-                'ctr' => $current['ctr'],
-                'position' => $current['position'],
-                'clicks_change_pct' => $this->changePercent($current['clicks'], $previous['clicks'] ?? null),
-            ];
-        } catch (Throwable $e) {
-            Log::warning('Dashboard GSC fetch failed', ['message' => $e->getMessage()]);
-            $errors[] = ['provider' => IntegrationProvider::GoogleSearchConsole->value, 'message' => 'GSC недоступен'];
-
-            return null;
-        }
-    }
-
-    private function fetchWebmasterMetrics(
-        ProjectIntegration $binding,
-        string $dateFrom,
-        string $dateTo,
-        string $compareFrom,
-        string $compareTo,
-        array &$errors,
-    ): ?array {
-        $token = (string) ($binding->integration->credentials['access_token'] ?? '');
-        $hostId = (string) $binding->external_resource_id;
-        if ($token === '' || $hostId === '') {
-            return null;
-        }
-
-        try {
-            $current = $this->webmaster->fetchSearchSummary($token, $hostId, $dateFrom, $dateTo);
-            $previous = $this->webmaster->fetchSearchSummary($token, $hostId, $compareFrom, $compareTo);
-
-            if ($current === null) {
-                return null;
-            }
-
-            return [
-                'source' => 'yandex_webmaster',
-                'clicks' => $current['clicks'],
-                'impressions' => $current['shows'],
-                'ctr' => $current['ctr'],
-                'clicks_change_pct' => $this->changePercent($current['clicks'], $previous['clicks'] ?? null),
-            ];
-        } catch (Throwable $e) {
-            Log::warning('Dashboard Webmaster fetch failed', ['message' => $e->getMessage()]);
-            $errors[] = ['provider' => IntegrationProvider::YandexWebmaster->value, 'message' => 'Вебмастер недоступен'];
-
-            return null;
-        }
-    }
-
-    /** @param  Collection<string, ProjectIntegration>  $bindings */
-    private function fetchPositionMetrics(
-        Collection $bindings,
-        string $dateFrom,
-        string $dateTo,
-        array &$errors,
-    ): ?array {
-        foreach (self::POSITION_PROVIDERS as $providerEnum) {
-            $binding = $bindings->get($providerEnum->value);
-            if (! $binding?->integration) {
-                continue;
-            }
-
-            $credentials = $binding->integration->credentials ?? [];
-            $apiKey = (string) ($credentials['api_key'] ?? $credentials['api_token'] ?? $credentials['access_token'] ?? '');
-            $userId = (string) ($credentials['user_id'] ?? '');
-
-            if ($apiKey === '') {
-                continue;
-            }
-
-            if ($providerEnum === IntegrationProvider::Topvisor && $userId === '') {
-                continue;
-            }
-
-            if (! $binding->external_resource_id) {
-                continue;
-            }
-
-            try {
-                $positionBinding = new PositionBinding(
-                    $userId,
-                    $apiKey,
-                    $binding->external_resource_id,
-                    $binding->external_resource_label,
-                    $binding->config,
-                );
-
-                $summary = $this->positions->get($providerEnum)->fetchSummary($positionBinding, $dateFrom, $dateTo);
-
-                return [
-                    'provider' => $providerEnum->value,
-                    'visibility' => $summary['visibility'],
-                    'visibility_dynamic' => $summary['visibility_dynamic'],
-                    'top10' => $summary['tops']['top10'] ?? null,
-                    'avg_position' => $summary['avg'],
-                ];
-            } catch (Throwable $e) {
-                Log::warning('Dashboard positions fetch failed', [
-                    'provider' => $providerEnum->value,
-                    'message' => $e->getMessage(),
-                ]);
-                $errors[] = [
-                    'provider' => $providerEnum->value,
-                    'message' => $providerEnum->label().' недоступен',
-                ];
-            }
-        }
-
-        return null;
     }
 
     private function changePercent(?float $current, ?float $previous): ?float

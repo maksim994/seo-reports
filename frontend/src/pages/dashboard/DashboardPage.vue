@@ -7,6 +7,9 @@
           Сводка по всем проектам за выбранный период
           <span v-if="store.data">· сравнение с {{ formatPeriod(store.data.compare_period) }}</span>
         </p>
+        <p class="mt-1 text-xs text-gray-400">
+          Метрики из Метрики (если подключена) · SEO-работы из журнала проекта
+        </p>
       </div>
       <div class="flex flex-wrap items-end gap-3">
         <div>
@@ -67,14 +70,14 @@
       </EmptyState>
 
       <div v-else class="overflow-x-auto">
-        <table class="w-full min-w-[960px] text-left text-sm">
+        <table class="w-full min-w-[900px] text-left text-sm">
           <thead class="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
             <tr>
               <th class="px-6 py-3">Проект</th>
               <th class="px-6 py-3">Визиты</th>
-              <th class="px-6 py-3">Клики в поиске</th>
-              <th class="px-6 py-3">Видимость</th>
-              <th class="px-6 py-3">TOP-10</th>
+              <th class="px-6 py-3">Пользователи</th>
+              <th class="px-6 py-3">Отказы</th>
+              <th class="px-6 py-3">SEO-работы</th>
               <th class="px-6 py-3">Последний отчёт</th>
               <th class="px-6 py-3 text-right">Действия</th>
             </tr>
@@ -84,6 +87,13 @@
               <td class="px-6 py-4">
                 <div class="font-medium text-gray-900">{{ project.name }}</div>
                 <div v-if="project.domain" class="text-xs text-gray-500">{{ project.domain }}</div>
+                <div
+                  v-if="project.summary.integrations_count > 0"
+                  class="mt-0.5 text-xs text-gray-400"
+                >
+                  {{ project.summary.integrations_count }}
+                  {{ integrationsLabel(project.summary.integrations_count) }}
+                </div>
                 <div v-if="project.errors.length" class="mt-1 flex flex-wrap gap-1">
                   <span
                     v-for="issue in project.errors"
@@ -102,39 +112,35 @@
                   </div>
                   <ChangeBadge :value="project.metrics.metrika.visits_change_pct" />
                 </template>
-                <span v-else class="text-gray-400">—</span>
+                <span v-else class="text-gray-400" title="Подключите Яндекс.Метрику к проекту">—</span>
               </td>
               <td class="px-6 py-4">
-                <template v-if="project.metrics.search">
+                <template v-if="project.metrics.metrika">
                   <div class="font-medium text-gray-900">
-                    {{ formatNumber(project.metrics.search.clicks) }}
+                    {{ formatNumber(project.metrics.metrika.users) }}
                   </div>
-                  <div class="text-xs text-gray-500">
-                    {{ project.metrics.search.source === 'google_search_console' ? 'Google' : 'Яндекс' }}
-                  </div>
-                  <ChangeBadge :value="project.metrics.search.clicks_change_pct" />
+                  <ChangeBadge :value="project.metrics.metrika.users_change_pct" />
                 </template>
                 <span v-else class="text-gray-400">—</span>
               </td>
               <td class="px-6 py-4">
-                <template v-if="project.metrics.positions?.visibility != null">
+                <template v-if="project.metrics.metrika">
                   <div class="font-medium text-gray-900">
-                    {{ formatNumber(project.metrics.positions.visibility, 1) }}%
+                    {{ formatNumber(project.metrics.metrika.bounce_rate, 1) }}%
                   </div>
-                  <ChangeBadge
-                    v-if="project.metrics.positions.visibility_dynamic != null"
-                    :value="project.metrics.positions.visibility_dynamic"
-                    suffix=" п.п."
-                    signed
-                  />
                 </template>
                 <span v-else class="text-gray-400">—</span>
               </td>
               <td class="px-6 py-4">
-                <span v-if="project.metrics.positions?.top10 != null" class="text-gray-900">
-                  {{ formatNumber(project.metrics.positions.top10) }}
-                </span>
-                <span v-else class="text-gray-400">—</span>
+                <div class="font-medium text-gray-900">
+                  {{ project.summary.work_items_count }}
+                </div>
+                <RouterLink
+                  :to="`/projects/${project.id}/work`"
+                  class="text-xs text-brand-600 hover:underline"
+                >
+                  журнал работ
+                </RouterLink>
               </td>
               <td class="px-6 py-4 text-gray-600">
                 <template v-if="project.last_report">
@@ -144,18 +150,7 @@
                 <span v-else class="text-gray-400">Нет</span>
               </td>
               <td class="px-6 py-4 text-right">
-                <RouterLink
-                  :to="`/projects/${project.id}`"
-                  class="mr-3 text-brand-600 hover:underline"
-                >
-                  Настройки
-                </RouterLink>
-                <RouterLink
-                  :to="`/projects/${project.id}/generate`"
-                  class="text-brand-600 hover:underline"
-                >
-                  Отчёт
-                </RouterLink>
+                <ProjectActionsMenu :project-id="project.id" />
               </td>
             </tr>
           </tbody>
@@ -170,6 +165,7 @@ import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import ChangeBadge from '@/components/ChangeBadge.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import ProjectActionsMenu from '@/components/ProjectActionsMenu.vue'
 import { useDashboardStore } from '@/stores/dashboard'
 
 const store = useDashboardStore()
@@ -189,6 +185,14 @@ function formatDate(value: string) {
 
 function formatPeriod(period: { start: string; end: string }) {
   return `${formatDate(period.start)} — ${formatDate(period.end)}`
+}
+
+function integrationsLabel(count: number) {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  if (mod10 === 1 && mod100 !== 11) return 'источник'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'источника'
+  return 'источников'
 }
 
 function applyPreviousMonth() {
