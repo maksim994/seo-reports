@@ -7,7 +7,7 @@ SaaS-сервис автоматической генерации SEO- и мар
 | Слой | Технология |
 |------|------------|
 | Backend | Laravel 11, PHP 8.3 |
-| Frontend | Vue 3, TailAdmin, Tailwind CSS |
+| Frontend | Vue 3, Tailwind CSS |
 | DB | PostgreSQL 16 |
 | Local | Docker Compose |
 | Production | [Coolify](https://coolify.io/) |
@@ -27,18 +27,16 @@ docker compose exec app php artisan migrate
 
 | | |
 |---|---|
-| [TZ.md](./TZ.md) | Техническое задание |
 | [docs/](./docs/) | Разработка, деплой, API, архитектура |
-| [TZ-faza-0-karkas.md](./TZ-faza-0-karkas.md) | Текущий этап |
-| [TZ-faza-0.5-admin.md](./TZ-faza-0.5-admin.md) | Админ-панель |
+| [CHANGELOG.md](./CHANGELOG.md) | История изменений |
+| [docs/architecture/report-blocks.md](./docs/architecture/report-blocks.md) | Каталог блоков отчёта |
 
-## Этапы
+## Возможности (кратко)
 
-1. **Фаза 0** — каркас, Docker, TailAdmin, auth, проекты
-2. **Фаза 1** — OAuth, шаблоны, генератор, PDF
-3. **Фаза 1.5** — позиции, ключи, DOCX/ODT
-4. **Фаза 2** — расписание, реклама, Coolify prod
-5. **Фаза 3** — команды, public API (опц.)
+- Проекты, интеграции с аналитикой и SEO-сервисами, конструктор шаблонов и генерация PDF/HTML-отчётов
+- Портфельный дашборд и **аналитика по проекту** (виджеты как в отчёте, своя раскладка)
+- Публичные ссылки на отчёты, технические аудиты, админ-панель
+- **«Что нового»** — анонсы фич для пользователей после деплоя
 
 ## Референсы
 

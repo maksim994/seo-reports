@@ -70,6 +70,11 @@ const router = createRouter({
           component: () => import('@/pages/projects/ProjectTechnicalAuditsPage.vue'),
         },
         {
+          path: 'projects/:id/analytics',
+          name: 'project-analytics',
+          component: () => import('@/pages/projects/ProjectAnalyticsPage.vue'),
+        },
+        {
           path: 'integrations',
           name: 'integrations',
           component: () => import('@/pages/integrations/IntegrationsPage.vue'),
@@ -132,6 +137,14 @@ router.beforeEach(async (to) => {
 
   if (!auth.initialized) {
     await auth.fetchUser()
+  }
+
+  if (auth.isAuthenticated && to.meta.requiresAuth) {
+    const { useProductUpdatesStore } = await import('@/stores/productUpdates')
+    const productUpdates = useProductUpdatesStore()
+    if (!productUpdates.loaded) {
+      void productUpdates.fetchUpdates()
+    }
   }
 
   if (to.name === 'register' && settings.publicSettings && !settings.publicSettings.registration_enabled) {

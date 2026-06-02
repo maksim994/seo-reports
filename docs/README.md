@@ -1,7 +1,7 @@
 # Документация SEO Reports
 
 > Оглавление технической документации проекта.  
-> ТЗ: [../TZ.md](../TZ.md)
+> История изменений: [../CHANGELOG.md](../CHANGELOG.md)
 
 ## Разделы
 
@@ -50,4 +50,17 @@
 2. Env variables — в `.env.example` и в deployment docs.
 3. Новая интеграция → файл в `integrations/`.
 4. Новый endpoint → обновление `api/README.md`.
-5. Релиз → запись в [CHANGELOG.md](../CHANGELOG.md).
+5. **Обязательно:** любое завершённое изменение → пункт в `[Unreleased]` [CHANGELOG.md](../CHANGELOG.md) (агенты: см. `.cursor/rules/changelog.mdc`).
+6. Релиз → перенос `[Unreleased]` в версию с датой.
+7. Новая пользовательская фича → запись в [backend/resources/product_updates.json](../backend/resources/product_updates.json) (см. ниже).
+
+## Анонс новых фич («Что нового»)
+
+При выкладке фичи, которую должны увидеть пользователи:
+
+1. Добавьте объект в `backend/resources/product_updates.json` с уникальным `id` (не менять после публикации).
+2. Укажите `cta_path` на экран, куда ведёт кнопка «Попробовать».
+3. Если фича на отдельной странице — добавьте `context_paths` (например `/projects/:id/analytics`) для контекстного баннера.
+4. Проверьте в UI: колокольчик в шапке, модалка, баннер на целевой странице, «Понятно» синхронизируется между устройствами.
+
+`CHANGELOG.md` — для разработчиков; `product_updates.json` — понятный текст для пользователей.

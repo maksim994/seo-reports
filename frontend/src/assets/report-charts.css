@@ -1,0 +1,197 @@
+.report-charts {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #0f172a;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.report-charts .muted {
+  color: #64748b;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.report-charts .data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  table-layout: fixed;
+  word-break: break-word;
+}
+
+.report-charts .data-table th,
+.report-charts .data-table td {
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.report-charts .data-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.report-charts .data-table tr:nth-child(even) td {
+  background: #fcfdff;
+}
+
+.report-charts .data-table-compact th,
+.report-charts .data-table-compact td {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.report-charts .data-table a {
+  color: #2563eb;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.report-charts .block-details {
+  overflow: visible;
+}
+
+.report-charts .page-channel-group {
+  margin-bottom: 20px;
+}
+
+.report-charts .page-channel-title {
+  font-size: 14px;
+  margin: 0 0 8px;
+  color: #0f172a;
+}
+
+.report-charts .page-channel-title a {
+  color: #2563eb;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.report-charts .viz-grid {
+  margin: 8px 0 4px;
+}
+
+.report-charts .viz-item {
+  margin-bottom: 14px;
+}
+
+.report-charts .chart-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.report-charts .cmp-chart,
+.report-charts .cmp-bars {
+  max-width: 100%;
+}
+
+.report-charts .chart-box.chart-apex {
+  background: #ffffff;
+  padding: 12px 8px 4px;
+}
+
+.report-charts .chart-box.chart-apex.donut {
+  padding: 8px 12px 4px;
+}
+
+.report-charts .chart-box.chart-apex.donut .chart-title {
+  margin-bottom: 8px;
+}
+
+.report-charts .apex-chart {
+  width: 100%;
+}
+
+.report-charts .chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.report-charts .chart-footnote {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 8px;
+}
+
+.report-charts .viz-table-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin: 18px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.report-charts .kpi-grid {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 4px 0 12px;
+  border-collapse: separate;
+}
+
+.report-charts .kpi-grid tr {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.report-charts .kpi-card {
+  display: block;
+  flex: 1 1 120px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  vertical-align: top;
+}
+
+.report-charts .kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.report-charts .kpi-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.report-charts .alert {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.report-charts .delta-up {
+  color: #059669;
+  font-weight: 600;
+}
+
+.report-charts .delta-down {
+  color: #dc2626;
+  font-weight: 600;
+}

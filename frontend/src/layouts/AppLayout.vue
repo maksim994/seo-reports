@@ -79,6 +79,23 @@
           Автоматизация отчётности в digital
         </div>
 
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            class="relative rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+            title="Что нового"
+            aria-label="Что нового"
+            @click="openProductUpdates"
+          >
+            <span class="text-lg leading-none" aria-hidden="true">🔔</span>
+            <span
+              v-if="productUpdates.unreadCount > 0"
+              class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-semibold text-white"
+            >
+              {{ productUpdates.unreadCount > 9 ? '9+' : productUpdates.unreadCount }}
+            </span>
+          </button>
+
         <div class="relative">
           <button
             class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-gray-100"
@@ -112,9 +129,13 @@
             </button>
           </div>
         </div>
+        </div>
       </header>
 
+      <ProductUpdatesModal v-model="productUpdatesOpen" />
+
       <main class="flex-1 p-4 lg:p-6">
+        <ProductUpdateBanner />
         <div
           v-if="settings.publicSettings?.maintenance_mode"
           class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
@@ -135,17 +156,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import ProductUpdateBanner from '@/components/ProductUpdateBanner.vue'
+import ProductUpdatesModal from '@/components/ProductUpdatesModal.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useProductUpdatesStore } from '@/stores/productUpdates'
 import { useSettingsStore } from '@/stores/settings'
 
 const auth = useAuthStore()
 const settings = useSettingsStore()
+const productUpdates = useProductUpdatesStore()
 const route = useRoute()
 const router = useRouter()
 const sidebarOpen = ref(false)
 const menuOpen = ref(false)
+const productUpdatesOpen = ref(false)
 
 const navItems = [
   { to: '/dashboard', label: 'Дашборд', icon: '📈' },
@@ -176,9 +202,28 @@ function isActive(path: string) {
   return route.path === path || route.path.startsWith(path + '/')
 }
 
+function openProductUpdates() {
+  menuOpen.value = false
+  void productUpdates.fetchUpdates()
+  productUpdatesOpen.value = true
+}
+
+watch(
+  () => auth.isAuthenticated,
+  (authenticated) => {
+    if (authenticated) {
+      void productUpdates.fetchUpdates()
+    } else {
+      productUpdates.reset()
+    }
+  },
+  { immediate: true },
+)
+
 async function handleLogout() {
   menuOpen.value = false
   await auth.logout()
+  productUpdates.reset()
   router.push({ name: 'login' })
 }
 </script>

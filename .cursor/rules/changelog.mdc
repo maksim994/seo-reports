@@ -1,0 +1,16 @@
+---
+description: Ведение CHANGELOG.md при изменениях в SEO Reports
+alwaysApply: true
+---
+
+# CHANGELOG
+
+При завершении задачи, которая меняет поведение для пользователей, API, интеграций или деплоя:
+
+1. Добавьте пункт в секцию **`[Unreleased]`** файла [CHANGELOG.md](../../CHANGELOG.md).
+2. Используйте категории Keep a Changelog: `Added`, `Changed`, `Fixed`, `Removed`, `Deprecated`, `Security`.
+3. Пишите по-русски, короткими законченными фразами — что изменилось и зачем, без внутренних имён классов, если можно обойтись.
+4. При релизе перенесите `[Unreleased]` в новую версию с датой (`## [x.y.z] — YYYY-MM-DD`).
+5. Для **новых пользовательских фич** дополнительно добавьте запись в `backend/resources/product_updates.json` (см. docs/README.md).
+
+Не пропускайте CHANGELOG «на потом» в том же PR/сессии, где сделана фича.

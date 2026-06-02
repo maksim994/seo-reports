@@ -37,4 +37,20 @@ class ReportBlockCatalog
     {
         return config('report_blocks.default_template.blocks', []);
     }
+
+    /** @return list<array<string, mixed>> */
+    public function dashboardBlocks(): array
+    {
+        return array_values(array_filter(
+            $this->all(),
+            fn (array $block) => ($block['dashboard_eligible'] ?? true) !== false,
+        ));
+    }
+
+    public function isDashboardEligible(string $blockType): bool
+    {
+        $block = $this->find($blockType);
+
+        return $block !== null && ($block['dashboard_eligible'] ?? true) !== false;
+    }
 }

@@ -1,35 +1,64 @@
 # Changelog
 
-Формат основан на [Keep a Changelog](https://keepachangelog.com/).
+Все заметные изменения проекта документируются здесь.  
+Формат — [Keep a Changelog](https://keepachangelog.com/). Версии — [Semantic Versioning](https://semver.org/).
+
+> **Для агентов и разработчиков:** при каждом завершённом изменении, видимом пользователю или в API, добавляйте запись в секцию `[Unreleased]`. При релизе переносите её в новую версию с датой. Пользовательские анонсы — в `backend/resources/product_updates.json` (см. [docs/README.md](./docs/README.md)).
 
 ## [Unreleased]
 
 ### Added
 
-- **Фаза 1:** генератор отчётов — очередь, HTML/PDF, блок Метрики, история, UI генератора
-- **Фаза 1:** конструктор шаблонов — CRUD, каталог 10 блоков, dual-list редактор
-- **Фаза 1 (начало):** Google OAuth, listResources, UI привязки ресурсов к проектам
-- **Фаза 1 (начало):** каркас OAuth-интеграций — миграции, API, провайдеры, UI «Источники данных»
-- **Фаза 0.5:** Админ-панель — API пользователей/настроек/проектов, middleware `admin`, `make:admin`, UI `/admin/*`
-- Публичные настройки `/api/settings/public` (регистрация, maintenance)
-- Блокировка пользователей и отключение регистрации через настройки
-- **Фаза 0:** Docker Compose dev-стек, Laravel 11 API (auth, projects CRUD), Vue 3 + TailAdmin-style UI
-- Sanctum SPA authentication (register, login, logout)
-- Health endpoint `/api/health`
-- PHPUnit tests для auth и projects
-- Dockerfile multi-stage (dev + production)
-- docker-compose.prod.yml reference для Coolify
+- (добавляйте сюда следующие изменения)
+
+## [0.2.0] — 2026-06-02
+
+### Added
+
+- **«Что нового»** — встроенный канал продуктовых обновлений: манифест `backend/resources/product_updates.json`, API (`GET/POST /api/product-updates`), учёт прочтений в БД (синхронизация между устройствами), колокольчик с badge в шапке, модалка с CTA, контекстный баннер на целевых страницах.
+- **Аналитика проекта** (`/projects/:id/analytics`) — персональный дашборд по проекту: виджеты из тех же блоков, что и в отчётах (Метрика, Topvisor, Keys.so, Вебмастер), выбор периода и сравнение, режим настройки с drag-and-resize сеткой (12 колонок), пресеты ширины ½ и 100%, каталог виджетов и «Добавить все», сохранение раскладки в настройках проекта.
+- **Настройки Метрики на уровне проекта** — цели и источники трафика для блоков дашборда и отчётов (`ProjectMetrikaController`, UI на странице проекта).
+- Расширенные блоки отчётов и дашборда: Keys.so (запросы сайта, ссылки, упоминания в ИИ), расширенная Метрика, Topvisor, Вебмастер; флаг `dashboard_eligible` в каталоге блоков.
+- Графики: легенда donut справа, наложенный line chart для органики по дням, типы графиков по секциям Метрики (donut / timeseries overlay).
+- ApexCharts на фронтенде, `useReportCharts`, стили `report-charts.css` для виджетов с `v-html`.
+- Feature- и unit-тесты: дашборд аналитики, product updates, `ReportChartBuilder`.
+
+### Changed
+
+- Режим просмотра дашборда — CSS Grid без фиксированной высоты карточек (контент не обрезается скроллом внутри виджета).
+- Docker `entrypoint.sh` — миграции при старте с повторами, без скрытия ошибок.
+- Заголовки графиков перенесены в шапку виджета; технические подписи (`metrika_overview` и т.п.) скрыты вне режима настройки.
 
 ### Fixed
 
-- Исправлена генерация `APP_KEY` в Docker entrypoint (не допускает битый ключ в `.env`)
-- Документирована команда восстановления ключа в `docs/development/setup.md`
+- Ошибка `layout is undefined` в режиме просмотра дашборда аналитики.
+- Пустой список «Что нового» при неприменённой миграции; сообщение об ошибке и кнопка «Повторить» в модалке.
+- Рекурсивные обновления Vue при ресайзе графиков (`ResizeObserver`).
+- Растягивание виджета на всю ширину: пресет 100% и половина с `x: 0`, визуальные ручки ресайза, сетка колонок в режиме редактирования.
 
-### Added (TZ)
+### Removed
 
-- Модуль **4.10 Админ-панель** — пользователи, настройки сервиса
-- [TZ-faza-0.5-admin.md](./TZ-faza-0.5-admin.md) — этап реализации админки
+- Файлы ТЗ из корня репозитория (`TZ.md`, `TZ-faza-*.md`) — актуальная документация в `docs/`.
 
-- Техническое задание (TZ.md) и этапы (TZ-faza-*.md)
-- Структура документации (`docs/`)
-- Решения: Docker Compose (local), Coolify (prod), TailAdmin (UI)
+## [0.1.0] — 2026-05-26
+
+### Added
+
+- **Каркас SaaS:** Docker Compose (nginx, PHP-FPM, PostgreSQL, Redis, MinIO, Mailpit), Laravel 11 API, Vue 3 + Tailwind UI.
+- **Аутентификация:** Sanctum SPA (регистрация, вход, выход), профиль пользователя, юридические страницы.
+- **Проекты:** CRUD, привязка интеграций к проекту, журнал SEO-работ.
+- **Интеграции:** OAuth и API-ключи — Яндекс.Метрика, Google Search Console, Topvisor, Keys.so, Яндекс.Вебмастер, Яндекс.Директ, Wordstat; UI «Источники данных».
+- **Шаблоны отчётов:** конструктор, каталог блоков, dual-list редактор, логотип шаблона.
+- **Генератор отчётов:** очередь, HTML/PDF, история, превью и скачивание, публичные ссылки на отчёт.
+- **Портфельный дашборд** (`/dashboard`) — сводка по проектам.
+- **Технические аудиты** — запуск, webhook, импорт, скачивание.
+- **Админ-панель** — пользователи, глобальные настройки, все проекты; maintenance mode.
+- **Production:** Coolify, multi-stage Dockerfile, worker/scheduler roles, `AWS_PREFIX` для S3.
+- Health endpoint, публичные настройки, PHPUnit-тесты auth/projects/integrations.
+
+### Fixed
+
+- Генерация `APP_KEY` в Docker entrypoint (битый ключ в `.env`).
+- 403 после OAuth redirect на `/integrations` в production.
+- Сборка Coolify (корневой symlink Dockerfile).
+- TypeScript-ошибка ProfilePage, ломавшая production build.

@@ -32,6 +32,8 @@ export const useAuthStore = defineStore('auth', () => {
       await ensureCsrfCookie()
       const { data } = await api.post<{ user: User }>('/register', payload)
       user.value = data.user
+      const { useProductUpdatesStore } = await import('@/stores/productUpdates')
+      void useProductUpdatesStore().fetchUpdates()
     } finally {
       loading.value = false
     }
@@ -43,6 +45,8 @@ export const useAuthStore = defineStore('auth', () => {
       await ensureCsrfCookie()
       const { data } = await api.post<{ user: User }>('/login', payload)
       user.value = data.user
+      const { useProductUpdatesStore } = await import('@/stores/productUpdates')
+      void useProductUpdatesStore().fetchUpdates()
     } finally {
       loading.value = false
     }
@@ -51,6 +55,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     await api.post('/logout')
     user.value = null
+    const { useProductUpdatesStore } = await import('@/stores/productUpdates')
+    useProductUpdatesStore().reset()
   }
 
   async function updateProfile(payload: {

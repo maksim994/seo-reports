@@ -9,6 +9,12 @@
         </div>
         <nav class="flex flex-wrap gap-2">
           <RouterLink
+            :to="`/projects/${projectId}/analytics`"
+            class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Аналитика
+          </RouterLink>
+          <RouterLink
             :to="`/projects/${projectId}/generate`"
             class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
           >

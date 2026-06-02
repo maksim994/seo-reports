@@ -102,22 +102,24 @@ class ReportChartBuilder
         $labels = array_map(fn (array $item) => $this->truncate((string) $item['label'], 28), $items);
         $values = array_map(fn (array $item) => round((float) $item['value'], 2), $items);
 
+        $legendPosition = (string) ($options['legend_position'] ?? 'right');
+
         return $this->apexChart('donut', [
-            'chart' => ['height' => 300],
+            'chart' => ['height' => (int) ($options['height'] ?? 240)],
             'series' => $values,
             'labels' => $labels,
             'plotOptions' => [
                 'pie' => [
                     'donut' => [
-                        'size' => '72%',
+                        'size' => '68%',
                         'labels' => [
                             'show' => true,
-                            'name' => ['show' => true, 'fontSize' => '12px'],
-                            'value' => ['show' => true, 'fontSize' => '16px', 'fontWeight' => 700],
+                            'name' => ['show' => true, 'fontSize' => '11px'],
+                            'value' => ['show' => true, 'fontSize' => '15px', 'fontWeight' => 700],
                             'total' => [
                                 'show' => true,
                                 'label' => $centerLabel,
-                                'fontSize' => '12px',
+                                'fontSize' => '11px',
                                 'color' => '#64748b',
                                 'formatter' => '__TOTAL__',
                             ],
@@ -126,9 +128,14 @@ class ReportChartBuilder
                 ],
             ],
             'legend' => [
-                'position' => 'bottom',
-                'horizontalAlign' => 'center',
-                'fontSize' => '12px',
+                'position' => $legendPosition,
+                'horizontalAlign' => $legendPosition === 'bottom' ? 'center' : 'left',
+                'fontSize' => '11px',
+                'offsetY' => 8,
+                'itemMargin' => [
+                    'horizontal' => 6,
+                    'vertical' => 3,
+                ],
             ],
             'dataLabels' => ['enabled' => false],
             'tooltip' => [
@@ -353,6 +360,87 @@ class ReportChartBuilder
             'legend' => [
                 'position' => 'bottom',
                 'horizontalAlign' => 'center',
+            ],
+        ], $title, 'timeseries wide');
+    }
+
+    /**
+     * Два периода на одном графике (наложение линий).
+     *
+     * @param  list<array{label: string, value: float}>  $current
+     * @param  list<array{label: string, value: float}>  $previous
+     */
+    public function compareTimeSeriesChart(array $current, array $previous, array $options = []): string
+    {
+        if ($current === []) {
+            return '';
+        }
+
+        $title = (string) ($options['title'] ?? 'Динамика');
+        $maxPoints = (int) ($options['max_points'] ?? 62);
+        $currentLabel = (string) ($options['current_label'] ?? 'Текущий период');
+        $previousLabel = (string) ($options['previous_label'] ?? 'Сравниваемый период');
+
+        $current = array_slice($current, 0, $maxPoints);
+        $previous = array_slice($previous, 0, $maxPoints);
+        $len = count($current);
+        if ($previous !== []) {
+            $len = min($len, count($previous));
+        }
+
+        $categories = array_map(
+            fn (array $point) => $this->truncate((string) ($point['label'] ?? '—'), 12),
+            array_slice($current, 0, $len),
+        );
+        $currentValues = array_map(
+            fn (array $point) => round((float) ($point['value'] ?? 0), 2),
+            array_slice($current, 0, $len),
+        );
+
+        $series = [
+            ['name' => $currentLabel, 'data' => $currentValues],
+        ];
+
+        if ($previous !== []) {
+            $previousValues = array_map(
+                fn (array $point) => round((float) ($point['value'] ?? 0), 2),
+                array_slice($previous, 0, $len),
+            );
+            $series[] = ['name' => $previousLabel, 'data' => $previousValues];
+        }
+
+        if ($this->forPdf) {
+            $html = $this->timeSeriesChart(array_slice($current, 0, $len), [
+                'title' => $currentLabel,
+                'chart_kind' => 'line',
+                'max_points' => $maxPoints,
+            ]);
+            if ($previous !== [] && $html !== '') {
+                $html .= $this->timeSeriesChart(
+                    array_slice($previous, 0, $len),
+                    ['title' => $previousLabel, 'chart_kind' => 'line', 'max_points' => $maxPoints],
+                );
+            }
+
+            return $html;
+        }
+
+        return $this->apexChart('line', [
+            'chart' => ['height' => 300],
+            'series' => $series,
+            'xaxis' => ['categories' => $categories],
+            'colors' => ['#2563EB', '#94A3B8'],
+            'stroke' => ['curve' => 'smooth', 'width' => 2],
+            'dataLabels' => ['enabled' => false],
+            'markers' => ['size' => 3, 'hover' => ['size' => 5]],
+            'legend' => [
+                'position' => 'right',
+                'fontSize' => '11px',
+                'offsetY' => 8,
+            ],
+            'tooltip' => [
+                'shared' => true,
+                'intersect' => false,
             ],
         ], $title, 'timeseries wide');
     }

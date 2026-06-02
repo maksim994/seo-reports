@@ -8,7 +8,9 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\PublicReportController;
+use App\Http\Controllers\Api\ProductUpdateController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ProjectAnalyticsDashboardController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectIntegrationController;
 use App\Http\Controllers\Api\ProjectMetrikaController;
@@ -42,6 +44,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::patch('/user/profile', [ProfileController::class, 'update']);
 
+    Route::get('/product-updates', [ProductUpdateController::class, 'index']);
+    Route::post('/product-updates/dismiss-all', [ProductUpdateController::class, 'dismissAll']);
+    Route::post('/product-updates/{id}/dismiss', [ProductUpdateController::class, 'dismiss']);
+
     Route::apiResource('projects', ProjectController::class);
 
     Route::get('/projects/{project}/work-items', [WorkItemController::class, 'index']);
@@ -60,6 +66,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/projects/{project}/integrations', [ProjectIntegrationController::class, 'store']);
     Route::delete('/projects/{project}/integrations/{projectIntegration}', [ProjectIntegrationController::class, 'destroy']);
     Route::get('/projects/{project}/metrika/options', [ProjectMetrikaController::class, 'goals']);
+    Route::get('/projects/{project}/analytics-dashboard', [ProjectAnalyticsDashboardController::class, 'show']);
+    Route::put('/projects/{project}/analytics-dashboard', [ProjectAnalyticsDashboardController::class, 'update']);
+    Route::match(['get', 'post'], '/projects/{project}/analytics-dashboard/data', [ProjectAnalyticsDashboardController::class, 'data']);
 
     Route::get('/report-blocks/catalog', [ReportBlockCatalogController::class, 'index']);
     Route::post('/templates/{template}/logo', [ReportTemplateController::class, 'uploadLogo']);

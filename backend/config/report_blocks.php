@@ -24,6 +24,7 @@ return [
             'label' => 'Титульная страница',
             'description' => 'Название проекта, период отчёта, логотип',
             'required_integration' => null,
+            'dashboard_eligible' => false,
         ],
         [
             'block_type' => 'table_of_contents',
@@ -31,6 +32,7 @@ return [
             'label' => 'Содержание',
             'description' => 'Оглавление с разделами отчёта',
             'required_integration' => null,
+            'dashboard_eligible' => false,
         ],
         [
             'block_type' => 'text_block',
@@ -38,6 +40,7 @@ return [
             'label' => 'Текстовый блок',
             'description' => 'Произвольный текст или комментарии',
             'required_integration' => null,
+            'dashboard_eligible' => false,
             'settings_schema' => [
                 ['key' => 'title', 'label' => 'Заголовок', 'type' => 'text', 'default' => 'Комментарии'],
                 ['key' => 'content', 'label' => 'Текст', 'type' => 'textarea', 'default' => 'Раздел для ручных комментариев специалиста.'],
@@ -259,6 +262,7 @@ return [
             'label' => 'Проделанная работа',
             'description' => 'Список выполненных работ за период отчёта',
             'required_integration' => null,
+            'dashboard_eligible' => false,
         ],
         [
             'block_type' => 'positions_visibility',

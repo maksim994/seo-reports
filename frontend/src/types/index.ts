@@ -260,3 +260,60 @@ export interface TechnicalAuditJob {
   project: { id: number; name: string; domain: string | null } | null
   files: TechnicalAuditFile[]
 }
+
+export interface DashboardWidgetLayout {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface DashboardWidget {
+  id: string
+  block_type: string
+  settings?: Record<string, unknown> | null
+  layout: DashboardWidgetLayout
+}
+
+export interface AnalyticsDashboardConfig {
+  widgets: DashboardWidget[]
+  is_suggested: boolean
+  catalog: {
+    blocks: ReportBlockCatalogItem[]
+    categories: Record<string, string>
+  }
+}
+
+export interface DashboardWidgetData {
+  id: string
+  block_type: string
+  title: string
+  chart_title?: string | null
+  success: boolean
+  html: string | null
+  error: string | null
+}
+
+export interface AnalyticsDashboardData {
+  period: { start: string; end: string }
+  compare_period: { start: string; end: string } | null
+  widgets: DashboardWidgetData[]
+}
+
+export interface ProductUpdate {
+  id: string
+  published_at: string
+  title: string
+  summary: string
+  cta_label: string
+  cta_path: string
+  context_paths: string[]
+  priority: number
+  expires_at: string | null
+  is_read: boolean
+}
+
+export interface ProductUpdatesPayload {
+  updates: ProductUpdate[]
+  unread_count: number
+}

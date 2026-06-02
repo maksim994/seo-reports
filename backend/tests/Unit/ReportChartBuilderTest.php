@@ -41,6 +41,7 @@ class ReportChartBuilderTest extends TestCase
         $this->assertStringContainsString('apex-chart', $html);
         $this->assertStringContainsString('Traffic', $html);
         $this->assertStringContainsString('donut', $html);
+        $this->assertStringContainsString('position&quot;:&quot;right', $html);
     }
 
     public function test_donut_chart_renders_share_legend_for_pdf(): void
@@ -53,6 +54,26 @@ class ReportChartBuilderTest extends TestCase
         $this->assertStringContainsString('share-legend', $html);
         $this->assertStringContainsString('Traffic', $html);
         $this->assertStringContainsString('%', $html);
+    }
+
+    public function test_compare_time_series_chart_renders_overlay_for_html(): void
+    {
+        $html = app(ReportChartBuilder::class)->forPdf(false)->compareTimeSeriesChart(
+            [
+                ['label' => '2026-04-01', 'value' => 100],
+                ['label' => '2026-04-02', 'value' => 120],
+            ],
+            [
+                ['label' => '2026-03-01', 'value' => 80],
+                ['label' => '2026-03-02', 'value' => 90],
+            ],
+            ['title' => 'Поисковый трафик'],
+        );
+
+        $this->assertStringContainsString('apex-chart', $html);
+        $this->assertStringContainsString('Текущий период', $html);
+        $this->assertStringContainsString('Сравниваемый период', $html);
+        $this->assertStringContainsString('position&quot;:&quot;right', $html);
     }
 
     public function test_comparison_chart_falls_back_to_kpi_cards_without_previous_period(): void

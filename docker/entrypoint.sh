@@ -24,6 +24,18 @@ if [ -f .env ]; then
     fi
 fi
 
-php artisan migrate --force --no-interaction 2>/dev/null || true
+echo "[entrypoint] Running database migrations..."
+attempt=1
+max_attempts=10
+until php artisan migrate --force --no-interaction; do
+    if [ "$attempt" -ge "$max_attempts" ]; then
+        echo "[entrypoint] ERROR: migrations failed after ${max_attempts} attempts"
+        exit 1
+    fi
+    echo "[entrypoint] Migrate attempt ${attempt} failed, retrying in 2s..."
+    attempt=$((attempt + 1))
+    sleep 2
+done
+echo "[entrypoint] Migrations complete."
 
 exec "$@"

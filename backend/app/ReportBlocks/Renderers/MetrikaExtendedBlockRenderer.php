@@ -104,8 +104,9 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'rows' => $rows,
             'headers' => ['Устройство', 'Визиты', 'Пользователи'],
             'columns' => ['label', 'visits', 'users'],
-            'chartType' => 'donut_bars',
+            'chartType' => 'donut',
             'valueKey' => 'visits',
+            'donutOptions' => ['title' => 'Устройства', 'center_label' => 'Визиты'],
         ];
     }
 
@@ -118,8 +119,9 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'rows' => $rows,
             'headers' => ['Страна / регион', 'Визиты', 'Пользователи'],
             'columns' => ['label', 'visits', 'users'],
-            'chartType' => 'bars',
+            'chartType' => 'donut',
             'valueKey' => 'visits',
+            'donutOptions' => ['title' => 'География', 'center_label' => 'Визиты'],
         ];
     }
 
@@ -162,8 +164,9 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'rows' => $rows,
             'headers' => ['Поисковая система', 'Визиты', 'Пользователи'],
             'columns' => ['label', 'visits', 'users'],
-            'chartType' => 'donut_bars',
+            'chartType' => 'donut',
             'valueKey' => 'visits',
+            'donutOptions' => ['title' => 'Поисковые системы', 'center_label' => 'Визиты'],
         ];
     }
 
@@ -198,11 +201,12 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
 
         return [
             'rows' => $current,
-            'previousSeries' => $previousSeries,
+            'previousSeries' => $previousSeries ?? [],
             'headers' => ['Дата', 'Визиты из поиска'],
             'columns' => ['label', 'value'],
-            'chartType' => 'timeseries_compare',
+            'chartType' => 'timeseries_overlay',
             'valueKey' => 'value',
+            'chartOptions' => ['title' => 'Поисковый трафик по дням', 'max_points' => 62],
         ];
     }
 
@@ -250,8 +254,9 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'rows' => $rows,
             'headers' => ['Канал', 'Конверсии', 'Визиты', 'CR, %'],
             'columns' => ['label', 'conversions', 'visits', 'conversion_rate'],
-            'chartType' => 'bars',
+            'chartType' => 'donut',
             'valueKey' => 'conversions',
+            'donutOptions' => ['title' => 'Конверсии по каналам', 'center_label' => 'Конверсии'],
             'formatters' => ['conversion_rate' => 'percent'],
         ];
     }

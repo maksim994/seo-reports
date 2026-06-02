@@ -20,9 +20,15 @@ Sanctum SPA authentication (cookie-based).
 | POST | `/logout` | Выход |
 | GET | `/user` | Текущий пользователь |
 
-## Endpoints (planned)
+## Product updates («Что нового»)
 
-См. [TZ.md — раздел 6.3](../../TZ.md#63-rest-api).
+| Method | Endpoint | Описание |
+|--------|----------|----------|
+| GET | `/product-updates` | Список активных анонсов и `unread_count` |
+| POST | `/product-updates/{id}/dismiss` | Отметить анонс прочитанным |
+| POST | `/product-updates/dismiss-all` | Отметить все прочитанными |
+
+Манифест: `backend/resources/product_updates.json`.
 
 ## Health
 

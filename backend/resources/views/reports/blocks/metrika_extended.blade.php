@@ -12,11 +12,14 @@
     $comparison = null;
     $combo = null;
     $chartOptions = $chartOptions ?? [];
+    $donutOptions = $donutOptions ?? ['title' => 'Структура', 'center_label' => 'Всего'];
     $chartType = $chartType ?? '';
     $tableMode = $tableMode ?? 'flat';
 
-    if ($chartType === 'donut_bars' && !empty($chartItems)) {
-        $donut = $charts->donutChart($chartItems, ['title' => 'Структура', 'center_label' => 'Всего']);
+    if ($chartType === 'donut' && !empty($chartItems)) {
+        $donut = $charts->donutChart($chartItems, $donutOptions);
+    } elseif ($chartType === 'donut_bars' && !empty($chartItems)) {
+        $donut = $charts->donutChart($chartItems, $donutOptions);
         $bars = $charts->horizontalBarChart($chartItems, ['title' => 'Топ', 'show_share' => false]);
     } elseif ($chartType === 'bars' && !empty($chartItems)) {
         $bars = $charts->horizontalBarChart($chartItems, ['title' => 'Топ', 'show_share' => true]);
@@ -33,6 +36,18 @@
         if (!empty($previousSeries)) {
             $comparison = $charts->timeSeriesChart($previousSeries, ['title' => 'Сравниваемый период', 'chart_kind' => 'line']);
         }
+    } elseif ($chartType === 'timeseries_overlay' && !empty($rows)) {
+        $timeseries = $charts->compareTimeSeriesChart(
+            $chartItems,
+            collect($previousSeries ?? [])->map(fn (array $row) => [
+                'label' => $row['label'] ?? '—',
+                'value' => (float) ($row['value'] ?? 0),
+            ])->all(),
+            array_merge([
+                'current_label' => 'Текущий период',
+                'previous_label' => 'Сравниваемый период',
+            ], $chartOptions),
+        );
     } elseif ($chartType === 'combo' && !empty($rows)) {
         $comboItems = collect($rows)->map(fn (array $row) => [
             'label' => $row['label'] ?? '—',
@@ -73,7 +88,7 @@
         @if ($tableMode !== 'by_channel')
             @include('reports.blocks.partials.visualization', compact('donut', 'bars', 'timeseries', 'comparison', 'combo'))
 
-            @if (!empty($donut) || !empty($bars) || !empty($timeseries) || !empty($comparison) || !empty($combo))
+            @if (!empty($rows) && !empty($headers))
                 <h3 class="viz-table-title">Детализация</h3>
             @endif
         @elseif (!empty($timeseries))
@@ -88,7 +103,7 @@
                 'channelHeaders' => $channelHeaders,
                 'formatters' => $formatters,
             ])
-        @else
+        @elseif (!empty($rows))
             <div class="block-details">
                 <table class="data-table">
                     <thead>
