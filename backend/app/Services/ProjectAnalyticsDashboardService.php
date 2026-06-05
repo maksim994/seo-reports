@@ -19,7 +19,7 @@ class ProjectAnalyticsDashboardService
 
     /** @var array<string, list<string>> */
     private const DEFAULT_BLOCKS_BY_PROVIDER = [
-        IntegrationProvider::YandexMetrika->value => ['metrika_overview', 'metrika_traffic_sources', 'metrika_search_engines_timeline'],
+        IntegrationProvider::YandexMetrika->value => ['metrika_overview', 'metrika_traffic_sources', 'metrika_search_engines_timeline', 'metrika_page_groups', 'metrika_page_group_conversions'],
         IntegrationProvider::GoogleAnalytics->value => ['ga_overview'],
         IntegrationProvider::GoogleSearchConsole->value => ['gsc_top_queries', 'gsc_performance'],
         IntegrationProvider::YandexWebmaster->value => ['webmaster_queries'],
@@ -271,6 +271,8 @@ class ProjectAnalyticsDashboardService
     {
         return match ($blockType) {
             'metrika_search_engines_timeline' => ['chart_period' => '25_months'],
+            'metrika_page_groups' => ['chart_period' => '12_months', 'traffic_scope' => 'organic'],
+            'metrika_page_group_conversions' => ['chart_period' => '12_months', 'traffic_scope' => 'organic'],
             default => [],
         };
     }

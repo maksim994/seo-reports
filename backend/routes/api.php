@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\ProjectAnalyticsDashboardController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectIntegrationController;
 use App\Http\Controllers\Api\ProjectMetrikaController;
+use App\Http\Controllers\Api\ProjectPageGroupsController;
 use App\Http\Controllers\Api\PublicSettingsController;
 use App\Http\Controllers\Api\ReportAssetController;
 use App\Http\Controllers\Api\ReportController;
@@ -66,6 +67,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/projects/{project}/integrations', [ProjectIntegrationController::class, 'store']);
     Route::delete('/projects/{project}/integrations/{projectIntegration}', [ProjectIntegrationController::class, 'destroy']);
     Route::get('/projects/{project}/metrika/options', [ProjectMetrikaController::class, 'goals']);
+    Route::get('/projects/{project}/page-groups', [ProjectPageGroupsController::class, 'show']);
+    Route::put('/projects/{project}/page-groups', [ProjectPageGroupsController::class, 'update']);
     Route::get('/projects/{project}/analytics-dashboard', [ProjectAnalyticsDashboardController::class, 'show']);
     Route::put('/projects/{project}/analytics-dashboard', [ProjectAnalyticsDashboardController::class, 'update']);
     Route::match(['get', 'post'], '/projects/{project}/analytics-dashboard/data', [ProjectAnalyticsDashboardController::class, 'data']);

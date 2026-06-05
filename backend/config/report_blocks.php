@@ -23,6 +23,11 @@ $metrikaChartPeriodOptions = [
     ['value' => 'year_to_date', 'label' => 'С 1 января'],
 ];
 
+$metrikaTrafficScopeOptions = [
+    ['value' => 'all', 'label' => 'Все визиты'],
+    ['value' => 'organic', 'label' => 'Только органика'],
+];
+
 return [
     'blocks' => [
         [
@@ -144,6 +149,53 @@ return [
             'label' => 'Метрика: поисковый трафик по дням',
             'description' => 'Органический трафик по дням с сравнением периодов',
             'required_integration' => 'yandex_metrika',
+        ],
+        [
+            'block_type' => 'metrika_page_groups',
+            'category' => 'yandex_metrika',
+            'label' => 'Метрика: типы страниц',
+            'description' => 'Динамика визитов по группам URL, заданным regex-масками проекта',
+            'required_integration' => 'yandex_metrika',
+            'settings_schema' => [
+                [
+                    'key' => 'chart_period',
+                    'label' => 'Период графика',
+                    'type' => 'select',
+                    'default' => '12_months',
+                    'options' => $metrikaChartPeriodOptions,
+                ],
+                [
+                    'key' => 'traffic_scope',
+                    'label' => 'Источник трафика',
+                    'type' => 'select',
+                    'default' => 'organic',
+                    'options' => $metrikaTrafficScopeOptions,
+                ],
+            ],
+        ],
+        [
+            'block_type' => 'metrika_page_group_conversions',
+            'category' => 'yandex_metrika',
+            'label' => 'Метрика: конверсии по типам страниц',
+            'description' => 'Достижения целей по группам URL, заданным regex-масками проекта',
+            'required_integration' => 'yandex_metrika',
+            'settings_schema' => [
+                $metrikaGoalIdsField,
+                [
+                    'key' => 'chart_period',
+                    'label' => 'Период графика',
+                    'type' => 'select',
+                    'default' => '12_months',
+                    'options' => $metrikaChartPeriodOptions,
+                ],
+                [
+                    'key' => 'traffic_scope',
+                    'label' => 'Источник трафика',
+                    'type' => 'select',
+                    'default' => 'organic',
+                    'options' => $metrikaTrafficScopeOptions,
+                ],
+            ],
         ],
         [
             'block_type' => 'metrika_landing_pages',

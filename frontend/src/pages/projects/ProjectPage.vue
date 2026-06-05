@@ -47,6 +47,7 @@
         @saved="onSaved"
       />
       <ProjectMetrikaSettings :project-id="projectId" @saved="onSaved" />
+      <ProjectPageGroupsSettings :project-id="projectId" @saved="onSaved" />
       <ProjectWordstatSettings :project-id="projectId" @saved="onSaved" />
     </div>
   </div>
@@ -57,6 +58,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import ProjectIntegrationsPanel from '@/components/ProjectIntegrationsPanel.vue'
 import ProjectMetrikaSettings from '@/components/ProjectMetrikaSettings.vue'
+import ProjectPageGroupsSettings from '@/components/ProjectPageGroupsSettings.vue'
 import ProjectWordstatSettings from '@/components/ProjectWordstatSettings.vue'
 import api from '@/lib/api'
 import type { Project } from '@/types'

@@ -151,6 +151,97 @@ class ReportBlockRenderersTest extends TestCase
             && $request['filters'] === "ym:s:lastTrafficSource=='organic'");
     }
 
+    public function test_metrika_page_groups_block_renders_grouped_timeline(): void
+    {
+        Http::fake([
+            'api-metrika.yandex.net/stat/v1/data*' => function ($request) {
+                $visits = $request['date2'] === '2026-04-30' ? 120 : 200;
+
+                return Http::response([
+                    'data' => [
+                        [
+                            'dimensions' => [
+                                ['id' => '2026-04-01', 'name' => '4'],
+                                ['name' => 'https://example.com/blog/post'],
+                            ],
+                            'metrics' => [$visits],
+                        ],
+                    ],
+                ]);
+            },
+        ]);
+
+        $user = User::factory()->create();
+        $project = Project::factory()->for($user)->create([
+            'settings' => [
+                'page_groups' => [
+                    ['id' => 'info', 'label' => 'Инфо раздел', 'pattern' => '^/blog/', 'enabled' => true],
+                ],
+            ],
+        ]);
+        $binding = $this->bindIntegration($user, $project, IntegrationProvider::YandexMetrika, '12345');
+        ['context' => $context, 'registry' => $registry] = $this->makeContext($user, $project, [$binding]);
+
+        $result = $registry->render('metrika_page_groups', $context, [
+            'chart_period' => '12_months',
+            'traffic_scope' => 'organic',
+        ]);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('Инфо раздел', $result->html);
+        $this->assertStringContainsString('Органика по типам страниц', $result->html);
+        $this->assertStringContainsString('delta-down', $result->html);
+        $this->assertStringContainsString('-40.0 %', $result->html);
+        Http::assertSent(fn ($request) => $request['dimensions'] === 'ym:s:month,ym:s:startURL'
+            && $request['filters'] === "ym:s:lastTrafficSource=='organic'");
+    }
+
+    public function test_metrika_page_group_conversions_block_renders_grouped_goals_timeline(): void
+    {
+        Http::fake([
+            'api-metrika.yandex.net/stat/v1/data*' => function ($request) {
+                $conversions = $request['date2'] === '2026-04-30' ? 12 : 20;
+
+                return Http::response([
+                    'data' => [
+                        [
+                            'dimensions' => [
+                                ['id' => '2026-04-01', 'name' => '4'],
+                                ['name' => 'https://example.com/blog/post'],
+                            ],
+                            'metrics' => [$conversions, 120],
+                        ],
+                    ],
+                ]);
+            },
+        ]);
+
+        $user = User::factory()->create();
+        $project = Project::factory()->for($user)->create([
+            'settings' => [
+                'page_groups' => [
+                    ['id' => 'info', 'label' => 'Инфо раздел', 'pattern' => '^/blog/', 'enabled' => true],
+                ],
+            ],
+        ]);
+        $binding = $this->bindIntegration($user, $project, IntegrationProvider::YandexMetrika, '12345');
+        ['context' => $context, 'registry' => $registry] = $this->makeContext($user, $project, [$binding]);
+
+        $result = $registry->render('metrika_page_group_conversions', $context, [
+            'chart_period' => '12_months',
+            'traffic_scope' => 'organic',
+        ]);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('Инфо раздел', $result->html);
+        $this->assertStringContainsString('Конверсии из органики по типам страниц', $result->html);
+        $this->assertStringContainsString('delta-down', $result->html);
+        $this->assertStringContainsString('-40.0 %', $result->html);
+        Http::assertSent(fn ($request) => $request['dimensions'] === 'ym:s:month,ym:s:startURL'
+            && $request['metrics'] === 'ym:s:sumGoalReachesAny,ym:s:visits'
+            && $request['filters'] === "ym:s:lastTrafficSource=='organic'");
+    }
+
     public function test_ga_overview_block_renders_metrics(): void
     {
         Http::fake([

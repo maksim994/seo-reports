@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\ReportFetch;
 use App\Models\ProjectIntegration;
+use App\Support\ProjectPageGroups;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -557,6 +558,177 @@ class YandexMetrikaDataService
         }
 
         return ['categories' => $categories, 'series' => $series];
+    }
+
+    /**
+     * @param  list<array{id: string, label: string, pattern: string, enabled: bool}>  $groups
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>, rows: list<array{label: string, visits: float, share: float}>}
+     */
+    public function fetchPageGroupsMonthlyTimelineRange(
+        string $accessToken,
+        string $counterId,
+        string $dateFrom,
+        string $dateTo,
+        array $groups,
+        string $trafficScope = 'all',
+    ): array {
+        $params = [
+            'ids' => $counterId,
+            'dimensions' => 'ym:s:month,ym:s:startURL',
+            'metrics' => 'ym:s:visits',
+            'date1' => $dateFrom,
+            'date2' => $dateTo,
+            'sort' => 'ym:s:month',
+            'limit' => 10000,
+        ];
+
+        if ($trafficScope === 'organic') {
+            $params['filters'] = "ym:s:lastTrafficSource=='organic'";
+        }
+
+        $matrix = [];
+        $monthKeys = [];
+
+        foreach ($this->statRequest($accessToken, $params)['data'] ?? [] as $row) {
+            $dims = $row['dimensions'] ?? [];
+            $monthRaw = $this->dimensionDateRaw($dims[0] ?? []);
+            $url = (string) ($dims[1]['name'] ?? $dims[1]['id'] ?? '');
+            $label = ProjectPageGroups::matchLabel($url, $groups);
+            $visits = (float) ($row['metrics'][0] ?? 0);
+
+            if ($monthRaw === '' || $label === null) {
+                continue;
+            }
+
+            $monthKeys[$monthRaw] = true;
+            $matrix[$label][$monthRaw] = ($matrix[$label][$monthRaw] ?? 0) + $visits;
+        }
+
+        $sortedMonths = array_keys($monthKeys);
+        sort($sortedMonths);
+
+        $totals = [];
+        foreach ($matrix as $label => $byMonth) {
+            $totals[$label] = array_sum($byMonth);
+        }
+        arsort($totals);
+
+        $series = [];
+        foreach (array_keys($totals) as $label) {
+            $data = [];
+            foreach ($sortedMonths as $monthRaw) {
+                $data[] = round((float) ($matrix[$label][$monthRaw] ?? 0), 2);
+            }
+            $series[] = ['name' => $label, 'data' => $data];
+        }
+
+        $grandTotal = array_sum($totals);
+        $rows = [];
+        foreach ($totals as $label => $visits) {
+            $rows[] = [
+                'label' => $label,
+                'visits' => round((float) $visits, 2),
+                'share' => $grandTotal > 0 ? round(((float) $visits / $grandTotal) * 100, 1) : 0.0,
+            ];
+        }
+
+        return [
+            'categories' => array_map(fn (string $m) => $this->formatMonthLabel($m), $sortedMonths),
+            'series' => $series,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
+     * @param  list<array{id: string, label: string, pattern: string, enabled: bool}>  $groups
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>, rows: list<array{label: string, conversions: float, visits: float, conversion_rate: float, share: float}>}
+     */
+    public function fetchPageGroupConversionsMonthlyTimelineRange(
+        string $accessToken,
+        string $counterId,
+        string $dateFrom,
+        string $dateTo,
+        array $groups,
+        ?array $goalIds = null,
+        string $trafficScope = 'all',
+    ): array {
+        $conversionMetrics = $this->conversionMetrics($goalIds);
+        $params = [
+            'ids' => $counterId,
+            'dimensions' => 'ym:s:month,ym:s:startURL',
+            'metrics' => implode(',', $conversionMetrics).',ym:s:visits',
+            'date1' => $dateFrom,
+            'date2' => $dateTo,
+            'sort' => 'ym:s:month',
+            'limit' => 10000,
+        ];
+
+        if ($trafficScope === 'organic') {
+            $params['filters'] = "ym:s:lastTrafficSource=='organic'";
+        }
+
+        $matrix = [];
+        $visitsByGroup = [];
+        $monthKeys = [];
+
+        foreach ($this->statRequest($accessToken, $params)['data'] ?? [] as $row) {
+            $dims = $row['dimensions'] ?? [];
+            $metrics = $row['metrics'] ?? [];
+            $monthRaw = $this->dimensionDateRaw($dims[0] ?? []);
+            $url = (string) ($dims[1]['name'] ?? $dims[1]['id'] ?? '');
+            $label = ProjectPageGroups::matchLabel($url, $groups);
+
+            if ($monthRaw === '' || $label === null) {
+                continue;
+            }
+
+            $conversions = 0.0;
+            foreach (array_keys($conversionMetrics) as $index) {
+                $conversions += (float) ($metrics[$index] ?? 0);
+            }
+            $visits = (float) ($metrics[count($conversionMetrics)] ?? 0);
+
+            $monthKeys[$monthRaw] = true;
+            $matrix[$label][$monthRaw] = ($matrix[$label][$monthRaw] ?? 0) + $conversions;
+            $visitsByGroup[$label] = ($visitsByGroup[$label] ?? 0) + $visits;
+        }
+
+        $sortedMonths = array_keys($monthKeys);
+        sort($sortedMonths);
+
+        $totals = [];
+        foreach ($matrix as $label => $byMonth) {
+            $totals[$label] = array_sum($byMonth);
+        }
+        arsort($totals);
+
+        $series = [];
+        foreach (array_keys($totals) as $label) {
+            $data = [];
+            foreach ($sortedMonths as $monthRaw) {
+                $data[] = round((float) ($matrix[$label][$monthRaw] ?? 0), 2);
+            }
+            $series[] = ['name' => $label, 'data' => $data];
+        }
+
+        $grandTotal = array_sum($totals);
+        $rows = [];
+        foreach ($totals as $label => $conversions) {
+            $visits = (float) ($visitsByGroup[$label] ?? 0);
+            $rows[] = [
+                'label' => $label,
+                'conversions' => round((float) $conversions, 2),
+                'visits' => round($visits, 2),
+                'conversion_rate' => $visits > 0 ? round(((float) $conversions / $visits) * 100, 2) : 0.0,
+                'share' => $grandTotal > 0 ? round(((float) $conversions / $grandTotal) * 100, 1) : 0.0,
+            ];
+        }
+
+        return [
+            'categories' => array_map(fn (string $m) => $this->formatMonthLabel($m), $sortedMonths),
+            'series' => $series,
+            'rows' => $rows,
+        ];
     }
 
     /** @return list<array{label: string, conversions: float, visits: float, conversion_rate: float}> */

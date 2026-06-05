@@ -64,14 +64,35 @@
 
     $formatters = $formatters ?? [];
     $formatCell = function (string $column, mixed $value) use ($formatters): string {
+        if ($value === null) {
+            return '—';
+        }
         if (($formatters[$column] ?? null) === 'percent') {
             return number_format((float) $value, 1, '.', ' ').' %';
+        }
+        if (($formatters[$column] ?? null) === 'signed_percent') {
+            $number = (float) $value;
+            $sign = $number > 0 ? '+' : '';
+
+            return $sign.number_format($number, 1, '.', ' ').' %';
         }
         if (is_numeric($value) && ! in_array($column, ['label'], true)) {
             return number_format((float) $value, str_contains((string) $value, '.') ? 1 : 0, '.', ' ');
         }
 
         return (string) $value;
+    };
+    $cellClass = function (string $column, mixed $value) use ($formatters): string {
+        if (($formatters[$column] ?? null) !== 'signed_percent' || $value === null) {
+            return '';
+        }
+
+        $number = (float) $value;
+        if (abs($number) < 0.0001) {
+            return 'delta-neutral';
+        }
+
+        return $number > 0 ? 'delta-up' : 'delta-down';
     };
 @endphp
 <div>
@@ -121,7 +142,12 @@
                                         @if (($linkColumn ?? null) === $column && !empty($row['url'] ?? null))
                                             <a href="{{ $row['url'] }}" target="_blank" rel="noopener noreferrer">{{ $formatCell($column, $row[$column] ?? $row['label'] ?? '—') }}</a>
                                         @else
-                                            {{ $formatCell($column, $row[$column] ?? '—') }}
+                                            @php($value = array_key_exists($column, $row) ? $row[$column] : null)
+                                            @if ($cellClass($column, $value) !== '')
+                                                <span class="{{ $cellClass($column, $value) }}">{{ $formatCell($column, $value) }}</span>
+                                            @else
+                                                {{ $formatCell($column, $value) }}
+                                            @endif
                                         @endif
                                     </td>
                                 @endforeach

@@ -1,5 +1,15 @@
 [
   {
+    "id": "project-page-groups",
+    "published_at": "2026-06-05",
+    "title": "Типы страниц по маскам",
+    "summary": "В проекте можно задать regex-маски для разделов сайта — блог, каталог, услуги и другие типы страниц. Графики Метрики покажут, какие группы URL растут или проседают по посещаемости и конверсиям.",
+    "cta_label": "Настроить проект",
+    "cta_path": "/projects",
+    "context_paths": ["/projects/:id", "/projects/:id/analytics"],
+    "priority": 30
+  },
+  {
     "id": "metrika-search-engines-timeline",
     "published_at": "2026-06-05",
     "title": "Динамика поисковых систем из Метрики",

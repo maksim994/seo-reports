@@ -22,6 +22,13 @@ export interface Project {
   user?: Pick<User, 'id' | 'name' | 'email'>
 }
 
+export interface ProjectPageGroup {
+  id: string
+  label: string
+  pattern: string
+  enabled: boolean
+}
+
 export interface AppSettings {
   app_name: string
   support_email: string

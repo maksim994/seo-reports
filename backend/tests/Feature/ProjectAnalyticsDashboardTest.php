@@ -173,8 +173,14 @@ class ProjectAnalyticsDashboardTest extends TestCase
         $response->assertOk();
         $widgets = $response->json('data.widgets');
         $timeline = collect($widgets)->firstWhere('block_type', 'metrika_search_engines_timeline');
+        $pageGroups = collect($widgets)->firstWhere('block_type', 'metrika_page_groups');
+        $pageGroupConversions = collect($widgets)->firstWhere('block_type', 'metrika_page_group_conversions');
 
         $this->assertNotNull($timeline);
         $this->assertSame('25_months', $timeline['settings']['chart_period'] ?? null);
+        $this->assertNotNull($pageGroups);
+        $this->assertSame('organic', $pageGroups['settings']['traffic_scope'] ?? null);
+        $this->assertNotNull($pageGroupConversions);
+        $this->assertSame('organic', $pageGroupConversions['settings']['traffic_scope'] ?? null);
     }
 }

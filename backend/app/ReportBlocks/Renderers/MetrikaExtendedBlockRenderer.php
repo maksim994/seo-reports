@@ -8,6 +8,7 @@ use App\ReportBlocks\ReportBlockResult;
 use App\ReportBlocks\ReportRenderContext;
 use App\Services\YandexMetrikaDataService;
 use App\Support\MetrikaBlockSettings;
+use App\Support\ProjectPageGroups;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\View;
 use Throwable;
@@ -23,6 +24,8 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
         'metrika_search_engines' => 'Метрика: поисковые системы',
         'metrika_search_engines_timeline' => 'Метрика: поисковые системы (динамика)',
         'metrika_organic_daily' => 'Метрика: поисковый трафик по дням',
+        'metrika_page_groups' => 'Метрика: типы страниц',
+        'metrika_page_group_conversions' => 'Метрика: конверсии по типам страниц',
         'metrika_landing_pages' => 'Метрика: посадочные страницы',
         'metrika_high_bounce' => 'Метрика: страницы с высоким отказом',
         'metrika_conversions_by_source' => 'Метрика: конверсии по каналам',
@@ -80,6 +83,8 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
                 'metrika_search_engines' => $this->payloadSearchEngines($token, $counterId, $from, $to),
                 'metrika_search_engines_timeline' => $this->payloadSearchEnginesTimeline($token, $counterId, $to, $settings),
                 'metrika_organic_daily' => $this->payloadOrganicDaily($token, $counterId, $from, $to, $periods['previous']),
+                'metrika_page_groups' => $this->payloadPageGroups($context, $token, $counterId, $to, $settings),
+                'metrika_page_group_conversions' => $this->payloadPageGroupConversions($context, $token, $counterId, $to, $settings, $goalIds),
                 'metrika_landing_pages' => $this->payloadLandingPages($token, $counterId, $from, $to),
                 'metrika_high_bounce' => $this->payloadHighBounce($token, $counterId, $from, $to),
                 'metrika_conversions_by_source' => $this->payloadConversions($token, $counterId, $from, $to, $goalIds),
@@ -230,6 +235,22 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
         ];
     }
 
+    /** @param  array{from: string, to: string, max_points: int}  $range */
+    private function previousChartRange(array $range): array
+    {
+        $from = Carbon::parse($range['from'])->startOfMonth();
+        $to = Carbon::parse($range['to'])->endOfMonth();
+        $months = max(1, $from->diffInMonths($to) + 1);
+        $previousTo = $from->copy()->subDay()->endOfMonth();
+        $previousFrom = $previousTo->copy()->startOfMonth()->subMonths($months - 1);
+
+        return [
+            'from' => $previousFrom->format('Y-m-d'),
+            'to' => $previousTo->format('Y-m-d'),
+            'max_points' => $months,
+        ];
+    }
+
     /** @param  array{0: string, 1: string}|null  $previous */
     private function payloadOrganicDaily(
         string $token,
@@ -252,6 +273,161 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'chartType' => 'timeseries_overlay',
             'valueKey' => 'value',
             'chartOptions' => ['title' => 'Поисковый трафик по дням', 'max_points' => 62],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function payloadPageGroups(
+        ReportRenderContext $context,
+        string $token,
+        string $counterId,
+        string $periodEnd,
+        ?array $settings,
+    ): array {
+        $groups = ProjectPageGroups::normalize($context->project->settings[ProjectPageGroups::SETTINGS_KEY] ?? []);
+        if ($groups === []) {
+            return [
+                'rows' => [],
+                'lineSeries' => ['categories' => [], 'series' => []],
+                'headers' => [],
+                'columns' => [],
+                'chartType' => 'line_timeseries_multi',
+            ];
+        }
+
+        $blockSettings = is_array($settings) ? $settings : [];
+        $range = $this->resolveChartRange($periodEnd, $blockSettings, '12_months');
+        $trafficScope = in_array(($blockSettings['traffic_scope'] ?? 'organic'), ['all', 'organic'], true)
+            ? (string) ($blockSettings['traffic_scope'] ?? 'organic')
+            : 'organic';
+
+        $current = $this->metrika->fetchPageGroupsMonthlyTimelineRange(
+            $token,
+            $counterId,
+            $range['from'],
+            $range['to'],
+            $groups,
+            $trafficScope,
+        );
+        $previousRange = $this->previousChartRange($range);
+        $previous = $this->metrika->fetchPageGroupsMonthlyTimelineRange(
+            $token,
+            $counterId,
+            $previousRange['from'],
+            $previousRange['to'],
+            $groups,
+            $trafficScope,
+        );
+
+        $previousByLabel = collect($previous['rows'])->keyBy('label');
+        $rows = collect($current['rows'])->map(function (array $row) use ($previousByLabel) {
+            $previousRow = $previousByLabel->get($row['label']);
+            $previousVisits = is_array($previousRow) ? (float) ($previousRow['visits'] ?? 0) : 0.0;
+            $currentVisits = (float) ($row['visits'] ?? 0);
+            $row['change_pct'] = $previousVisits > 0
+                ? round((($currentVisits - $previousVisits) / $previousVisits) * 100, 1)
+                : null;
+
+            return $row;
+        })->values()->all();
+
+        return [
+            'rows' => $rows,
+            'lineSeries' => [
+                'categories' => $current['categories'],
+                'series' => $current['series'],
+            ],
+            'headers' => ['Тип страниц', 'Визиты', 'Доля', 'Δ к прошлому периоду'],
+            'columns' => ['label', 'visits', 'share', 'change_pct'],
+            'chartType' => 'line_timeseries_multi',
+            'chartOptions' => [
+                'title' => $trafficScope === 'organic'
+                    ? 'Органика по типам страниц'
+                    : 'Визиты по типам страниц',
+                'max_points' => $range['max_points'],
+            ],
+            'formatters' => ['share' => 'percent', 'change_pct' => 'signed_percent'],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function payloadPageGroupConversions(
+        ReportRenderContext $context,
+        string $token,
+        string $counterId,
+        string $periodEnd,
+        ?array $settings,
+        ?array $goalIds,
+    ): array {
+        $groups = ProjectPageGroups::normalize($context->project->settings[ProjectPageGroups::SETTINGS_KEY] ?? []);
+        if ($groups === []) {
+            return [
+                'rows' => [],
+                'lineSeries' => ['categories' => [], 'series' => []],
+                'headers' => [],
+                'columns' => [],
+                'chartType' => 'line_timeseries_multi',
+            ];
+        }
+
+        $blockSettings = is_array($settings) ? $settings : [];
+        $range = $this->resolveChartRange($periodEnd, $blockSettings, '12_months');
+        $trafficScope = in_array(($blockSettings['traffic_scope'] ?? 'organic'), ['all', 'organic'], true)
+            ? (string) ($blockSettings['traffic_scope'] ?? 'organic')
+            : 'organic';
+
+        $current = $this->metrika->fetchPageGroupConversionsMonthlyTimelineRange(
+            $token,
+            $counterId,
+            $range['from'],
+            $range['to'],
+            $groups,
+            $goalIds,
+            $trafficScope,
+        );
+        $previousRange = $this->previousChartRange($range);
+        $previous = $this->metrika->fetchPageGroupConversionsMonthlyTimelineRange(
+            $token,
+            $counterId,
+            $previousRange['from'],
+            $previousRange['to'],
+            $groups,
+            $goalIds,
+            $trafficScope,
+        );
+
+        $previousByLabel = collect($previous['rows'])->keyBy('label');
+        $rows = collect($current['rows'])->map(function (array $row) use ($previousByLabel) {
+            $previousRow = $previousByLabel->get($row['label']);
+            $previousConversions = is_array($previousRow) ? (float) ($previousRow['conversions'] ?? 0) : 0.0;
+            $currentConversions = (float) ($row['conversions'] ?? 0);
+            $row['change_pct'] = $previousConversions > 0
+                ? round((($currentConversions - $previousConversions) / $previousConversions) * 100, 1)
+                : null;
+
+            return $row;
+        })->values()->all();
+
+        return [
+            'rows' => $rows,
+            'lineSeries' => [
+                'categories' => $current['categories'],
+                'series' => $current['series'],
+            ],
+            'headers' => ['Тип страниц', 'Конверсии', 'Визиты', 'CR', 'Доля конверсий', 'Δ к прошлому периоду'],
+            'columns' => ['label', 'conversions', 'visits', 'conversion_rate', 'share', 'change_pct'],
+            'chartType' => 'line_timeseries_multi',
+            'chartOptions' => [
+                'title' => $trafficScope === 'organic'
+                    ? 'Конверсии из органики по типам страниц'
+                    : 'Конверсии по типам страниц',
+                'max_points' => $range['max_points'],
+            ],
+            'formatters' => [
+                'conversion_rate' => 'percent',
+                'share' => 'percent',
+                'change_pct' => 'signed_percent',
+            ],
         ];
     }
 
