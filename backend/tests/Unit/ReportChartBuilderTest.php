@@ -86,4 +86,20 @@ class ReportChartBuilderTest extends TestCase
         $this->assertStringContainsString('kpi-grid', $html);
         $this->assertStringContainsString('1 000', $html);
     }
+
+    public function test_comparison_chart_renders_semantic_delta_badges(): void
+    {
+        $html = app(ReportChartBuilder::class)->forPdf(false)->comparisonChart([
+            ['label' => 'Visits', 'current' => 125, 'previous' => 100],
+            ['label' => 'Bounce', 'current' => 80, 'previous' => 100, 'lower_is_better' => true],
+            ['label' => 'Users', 'current' => 90, 'previous' => 100],
+        ]);
+
+        $this->assertStringContainsString('cmp-delta-summary', $html);
+        $this->assertStringContainsString('+25.0%', $html);
+        $this->assertStringContainsString('-20.0%', $html);
+        $this->assertStringContainsString('-10.0%', $html);
+        $this->assertSame(2, substr_count($html, 'delta-up'));
+        $this->assertSame(1, substr_count($html, 'delta-down'));
+    }
 }

@@ -16,6 +16,13 @@ $metrikaTrafficSourceField = [
     'options_key' => 'metrika_traffic_sources',
 ];
 
+$metrikaChartPeriodOptions = [
+    ['value' => '6_months', 'label' => '6 месяцев'],
+    ['value' => '12_months', 'label' => '12 месяцев'],
+    ['value' => '25_months', 'label' => '25 месяцев'],
+    ['value' => 'year_to_date', 'label' => 'С 1 января'],
+];
+
 return [
     'blocks' => [
         [
@@ -96,8 +103,17 @@ return [
             'block_type' => 'metrika_monthly_visits',
             'category' => 'yandex_metrika',
             'label' => 'Метрика: динамика по месяцам',
-            'description' => 'Визиты за последние 12 месяцев',
+            'description' => 'Визиты по каналам за выбранный период',
             'required_integration' => 'yandex_metrika',
+            'settings_schema' => [
+                [
+                    'key' => 'chart_period',
+                    'label' => 'Период графика',
+                    'type' => 'select',
+                    'default' => '12_months',
+                    'options' => $metrikaChartPeriodOptions,
+                ],
+            ],
         ],
         [
             'block_type' => 'metrika_search_engines',
@@ -109,9 +125,18 @@ return [
         [
             'block_type' => 'metrika_search_engines_timeline',
             'category' => 'yandex_metrika',
-            'label' => 'Метрика: ПС — динамика 13 мес.',
-            'description' => 'Органический трафик по поисковым системам за год и месяц до конца отчёта',
+            'label' => 'Метрика: ПС — динамика',
+            'description' => 'Органический трафик по поисковым системам за выбранный период',
             'required_integration' => 'yandex_metrika',
+            'settings_schema' => [
+                [
+                    'key' => 'chart_period',
+                    'label' => 'Период графика',
+                    'type' => 'select',
+                    'default' => '25_months',
+                    'options' => $metrikaChartPeriodOptions,
+                ],
+            ],
         ],
         [
             'block_type' => 'metrika_organic_daily',

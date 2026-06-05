@@ -1,5 +1,15 @@
 [
   {
+    "id": "metrika-search-engines-timeline",
+    "published_at": "2026-06-05",
+    "title": "Динамика поисковых систем из Метрики",
+    "summary": "В аналитике проекта появился график органического трафика по поисковым системам: можно смотреть 6, 12, 25 месяцев или период с 1 января. Данные загружаются из Яндекс.Метрики.",
+    "cta_label": "Открыть аналитику",
+    "cta_path": "/projects",
+    "context_paths": ["/projects/:id/analytics"],
+    "priority": 20
+  },
+  {
     "id": "project-analytics-dashboard",
     "published_at": "2026-06-02",
     "title": "Аналитика проекта",

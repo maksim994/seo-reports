@@ -8,6 +8,7 @@ use App\ReportBlocks\ReportBlockResult;
 use App\ReportBlocks\ReportRenderContext;
 use App\Services\YandexMetrikaDataService;
 use App\Support\MetrikaBlockSettings;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\View;
 use Throwable;
 
@@ -25,6 +26,12 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
         'metrika_landing_pages' => 'Метрика: посадочные страницы',
         'metrika_high_bounce' => 'Метрика: страницы с высоким отказом',
         'metrika_conversions_by_source' => 'Метрика: конверсии по каналам',
+    ];
+
+    private const CHART_PERIOD_MONTHS = [
+        '6_months' => 6,
+        '12_months' => 12,
+        '25_months' => 25,
     ];
 
     public function __construct(private YandexMetrikaDataService $metrika) {}
@@ -69,9 +76,9 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
                 'metrika_devices' => $this->payloadDevices($token, $counterId, $from, $to),
                 'metrika_geo' => $this->payloadGeo($token, $counterId, $from, $to),
                 'metrika_daily_visits' => $this->payloadDailyVisits($token, $counterId, $from, $to),
-                'metrika_monthly_visits' => $this->payloadMonthlyVisits($token, $counterId, $to),
+                'metrika_monthly_visits' => $this->payloadMonthlyVisits($token, $counterId, $to, $settings),
                 'metrika_search_engines' => $this->payloadSearchEngines($token, $counterId, $from, $to),
-                'metrika_search_engines_timeline' => $this->payloadSearchEnginesTimeline($token, $counterId, $to),
+                'metrika_search_engines_timeline' => $this->payloadSearchEnginesTimeline($token, $counterId, $to, $settings),
                 'metrika_organic_daily' => $this->payloadOrganicDaily($token, $counterId, $from, $to, $periods['previous']),
                 'metrika_landing_pages' => $this->payloadLandingPages($token, $counterId, $from, $to),
                 'metrika_high_bounce' => $this->payloadHighBounce($token, $counterId, $from, $to),
@@ -141,9 +148,15 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
     }
 
     /** @return array<string, mixed> */
-    private function payloadMonthlyVisits(string $token, string $counterId, string $periodEnd): array
+    private function payloadMonthlyVisits(string $token, string $counterId, string $periodEnd, ?array $settings): array
     {
-        $lineSeries = $this->metrika->fetchMonthlyVisitsByTrafficSource($token, $counterId, $periodEnd);
+        $range = $this->resolveChartRange($periodEnd, $settings, '12_months');
+        $lineSeries = $this->metrika->fetchMonthlyVisitsByTrafficSourceRange(
+            $token,
+            $counterId,
+            $range['from'],
+            $range['to'],
+        );
 
         return [
             'rows' => [],
@@ -151,7 +164,7 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'headers' => [],
             'columns' => [],
             'chartType' => 'line_timeseries_multi',
-            'chartOptions' => ['max_points' => 12],
+            'chartOptions' => ['title' => 'Динамика по каналам', 'max_points' => $range['max_points']],
         ];
     }
 
@@ -171,9 +184,15 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
     }
 
     /** @return array<string, mixed> */
-    private function payloadSearchEnginesTimeline(string $token, string $counterId, string $periodEnd): array
+    private function payloadSearchEnginesTimeline(string $token, string $counterId, string $periodEnd, ?array $settings): array
     {
-        $lineSeries = $this->metrika->fetchSearchEnginesMonthlyTimeline($token, $counterId, $periodEnd, 13);
+        $range = $this->resolveChartRange($periodEnd, $settings, '25_months');
+        $lineSeries = $this->metrika->fetchSearchEnginesMonthlyTimelineRange(
+            $token,
+            $counterId,
+            $range['from'],
+            $range['to'],
+        );
 
         return [
             'rows' => [],
@@ -181,7 +200,33 @@ class MetrikaExtendedBlockRenderer extends AbstractIntegrationBlockRenderer impl
             'headers' => [],
             'columns' => [],
             'chartType' => 'line_timeseries_multi',
-            'chartOptions' => ['max_points' => 13],
+            'chartOptions' => ['title' => 'Динамика по поисковым системам', 'max_points' => $range['max_points']],
+        ];
+    }
+
+    /** @return array{from: string, to: string, max_points: int} */
+    private function resolveChartRange(string $periodEnd, ?array $settings, string $defaultPeriod): array
+    {
+        $period = (string) ($settings['chart_period'] ?? $defaultPeriod);
+        $end = Carbon::parse($periodEnd)->startOfDay();
+
+        if ($period === 'year_to_date') {
+            $start = $end->copy()->startOfYear();
+
+            return [
+                'from' => $start->format('Y-m-d'),
+                'to' => $end->format('Y-m-d'),
+                'max_points' => $start->diffInMonths($end) + 1,
+            ];
+        }
+
+        $months = self::CHART_PERIOD_MONTHS[$period] ?? self::CHART_PERIOD_MONTHS[$defaultPeriod];
+        $start = $end->copy()->startOfMonth()->subMonths($months - 1);
+
+        return [
+            'from' => $start->format('Y-m-d'),
+            'to' => $end->copy()->endOfMonth()->format('Y-m-d'),
+            'max_points' => $months,
         ];
     }
 

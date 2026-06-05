@@ -127,6 +127,25 @@
   margin-top: 8px;
 }
 
+.report-charts .cmp-delta-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-charts .cmp-delta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 4px 8px;
+}
+
+.report-charts .cmp-delta-label {
+  color: #64748b;
+}
+
 .report-charts .viz-table-title {
   font-size: 13px;
   font-weight: 600;
@@ -193,5 +212,10 @@
 
 .report-charts .delta-down {
   color: #dc2626;
+  font-weight: 600;
+}
+
+.report-charts .delta-neutral {
+  color: #64748b;
   font-weight: 600;
 }

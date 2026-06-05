@@ -12,13 +12,22 @@
         $sign = $value > 0 ? '+' : '';
         return $sign . number_format($value, 1, '.', '') . '%';
     };
+    $deltaClass = function (?float $value, bool $lowerIsBetter = false): string {
+        if ($value === null) {
+            return '';
+        }
+        if (abs($value) < 0.0001) {
+            return 'delta-neutral';
+        }
+        return ($lowerIsBetter ? $value < 0 : $value > 0) ? 'delta-up' : 'delta-down';
+    };
     $comparison = null;
     if ($current) {
         $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
         $comparison = $charts->comparisonChart([
             ['label' => 'Визиты', 'current' => $current['visits'] ?? 0, 'previous' => $previous['visits'] ?? null],
             ['label' => 'Пользователи', 'current' => $current['users'] ?? 0, 'previous' => $previous['users'] ?? null],
-            ['label' => 'Отказы', 'current' => $current['bounce_rate'] ?? 0, 'previous' => $previous['bounce_rate'] ?? null, 'suffix' => '%'],
+            ['label' => 'Отказы', 'current' => $current['bounce_rate'] ?? 0, 'previous' => $previous['bounce_rate'] ?? null, 'suffix' => '%', 'lower_is_better' => true],
             ['label' => 'Время', 'current' => $current['avg_duration'] ?? 0, 'previous' => $previous['avg_duration'] ?? null, 'suffix' => 'с'],
         ], ['title' => 'Динамика ключевых метрик']);
     }
@@ -53,7 +62,8 @@
                     <td>{{ number_format($current['visits'], 0, '.', ' ') }}</td>
                     @if ($previous)
                         <td>{{ number_format($previous['visits'], 0, '.', ' ') }}</td>
-                        <td>{{ $formatDelta($delta($current['visits'], $previous['visits'])) }}</td>
+                        @php($value = $delta($current['visits'], $previous['visits']))
+                        <td><span class="{{ $deltaClass($value) }}">{{ $formatDelta($value) }}</span></td>
                     @endif
                 </tr>
                 <tr>
@@ -61,7 +71,8 @@
                     <td>{{ number_format($current['users'], 0, '.', ' ') }}</td>
                     @if ($previous)
                         <td>{{ number_format($previous['users'], 0, '.', ' ') }}</td>
-                        <td>{{ $formatDelta($delta($current['users'], $previous['users'])) }}</td>
+                        @php($value = $delta($current['users'], $previous['users']))
+                        <td><span class="{{ $deltaClass($value) }}">{{ $formatDelta($value) }}</span></td>
                     @endif
                 </tr>
                 <tr>
@@ -69,7 +80,8 @@
                     <td>{{ number_format($current['bounce_rate'], 1, '.', ' ') }}%</td>
                     @if ($previous)
                         <td>{{ number_format($previous['bounce_rate'], 1, '.', ' ') }}%</td>
-                        <td>{{ $formatDelta($delta($current['bounce_rate'], $previous['bounce_rate'])) }}</td>
+                        @php($value = $delta($current['bounce_rate'], $previous['bounce_rate']))
+                        <td><span class="{{ $deltaClass($value, true) }}">{{ $formatDelta($value) }}</span></td>
                     @endif
                 </tr>
                 <tr>
@@ -77,7 +89,8 @@
                     <td>{{ number_format($current['avg_duration'], 0, '.', ' ') }}</td>
                     @if ($previous)
                         <td>{{ number_format($previous['avg_duration'], 0, '.', ' ') }}</td>
-                        <td>{{ $formatDelta($delta($current['avg_duration'], $previous['avg_duration'])) }}</td>
+                        @php($value = $delta($current['avg_duration'], $previous['avg_duration']))
+                        <td><span class="{{ $deltaClass($value) }}">{{ $formatDelta($value) }}</span></td>
                     @endif
                 </tr>
             </tbody>

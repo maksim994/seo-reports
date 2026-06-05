@@ -19,7 +19,7 @@ class ProjectAnalyticsDashboardService
 
     /** @var array<string, list<string>> */
     private const DEFAULT_BLOCKS_BY_PROVIDER = [
-        IntegrationProvider::YandexMetrika->value => ['metrika_overview', 'metrika_traffic_sources'],
+        IntegrationProvider::YandexMetrika->value => ['metrika_overview', 'metrika_traffic_sources', 'metrika_search_engines_timeline'],
         IntegrationProvider::GoogleAnalytics->value => ['ga_overview'],
         IntegrationProvider::GoogleSearchConsole->value => ['gsc_top_queries', 'gsc_performance'],
         IntegrationProvider::YandexWebmaster->value => ['webmaster_queries'],
@@ -192,7 +192,7 @@ class ProjectAnalyticsDashboardService
             fn (string $blockType) => [
                 'id' => (string) Str::uuid(),
                 'block_type' => $blockType,
-                'settings' => [],
+                'settings' => $this->defaultWidgetSettings($blockType),
             ],
             array_slice($blockTypes, 0, 6),
         ));
@@ -264,6 +264,15 @@ class ProjectAnalyticsDashboardService
         }
 
         return $laid;
+    }
+
+    /** @return array<string, mixed> */
+    private function defaultWidgetSettings(string $blockType): array
+    {
+        return match ($blockType) {
+            'metrika_search_engines_timeline' => ['chart_period' => '25_months'],
+            default => [],
+        };
     }
 
     /** @return array{0: Carbon, 1: Carbon, 2: Carbon, 3: Carbon} */

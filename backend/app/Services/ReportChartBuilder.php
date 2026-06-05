@@ -49,7 +49,7 @@ class ReportChartBuilder
         return $this->apexChart('bar', [
             'chart' => ['height' => $height],
             'series' => [['data' => $values]],
-            'xaxis' => ['categories' => $labels],
+            'xaxis' => ['type' => 'category', 'categories' => $labels],
             'plotOptions' => [
                 'bar' => [
                     'horizontal' => true,
@@ -147,7 +147,7 @@ class ReportChartBuilder
     }
 
     /**
-     * @param  list<array{label: string, current: float, previous?: float|null, suffix?: string}>  $metrics
+     * @param  list<array{label: string, current: float, previous?: float|null, suffix?: string, lower_is_better?: bool}>  $metrics
      */
     public function comparisonChart(array $metrics, array $options = []): string
     {
@@ -190,7 +190,7 @@ class ReportChartBuilder
                     'suffixes' => $suffixes,
                 ],
             ],
-        ], $title, 'comparison wide');
+        ], $title, 'comparison wide', $this->comparisonDeltaSummary($metrics), true);
     }
 
     /**
@@ -353,7 +353,7 @@ class ReportChartBuilder
         return $this->apexChart('line', [
             'chart' => ['height' => 320],
             'series' => $apexSeries,
-            'xaxis' => ['categories' => array_map(fn (string $c) => $this->truncate($c, 12), $categories)],
+            'xaxis' => ['type' => 'category', 'categories' => array_map(fn (string $c) => $this->truncate($c, 12), $categories)],
             'stroke' => ['curve' => 'smooth', 'width' => 2],
             'dataLabels' => ['enabled' => false],
             'markers' => ['size' => 0, 'hover' => ['size' => 4]],
@@ -428,7 +428,7 @@ class ReportChartBuilder
         return $this->apexChart('line', [
             'chart' => ['height' => 300],
             'series' => $series,
-            'xaxis' => ['categories' => $categories],
+            'xaxis' => ['type' => 'category', 'categories' => $categories],
             'colors' => ['#2563EB', '#94A3B8'],
             'stroke' => ['curve' => 'smooth', 'width' => 2],
             'dataLabels' => ['enabled' => false],
@@ -466,7 +466,7 @@ class ReportChartBuilder
         return '<table class="kpi-grid" width="100%"><tr>'.$cards.'</tr></table>';
     }
 
-    private function apexChart(string $type, array $config, string $title = '', string $class = '', ?string $footnote = null): string
+    private function apexChart(string $type, array $config, string $title = '', string $class = '', ?string $footnote = null, bool $footnoteIsHtml = false): string
     {
         $id = $this->nextChartId();
         $height = (int) ($config['chart']['height'] ?? 280);
@@ -480,7 +480,7 @@ class ReportChartBuilder
 
         $html = ($title !== '' ? '<div class="chart-title">'.e($title).'</div>' : '')
             .'<div id="'.e($id).'" class="apex-chart" style="min-height:'.$height.'px" data-config="'.e($json).'"></div>'
-            .($footnote !== null && $footnote !== '' ? '<div class="chart-footnote">'.e($footnote).'</div>' : '');
+            .($footnote !== null && $footnote !== '' ? '<div class="chart-footnote">'.($footnoteIsHtml ? $footnote : e($footnote)).'</div>' : '');
 
         return $this->wrapChart($html, 'apex '.$class);
     }
@@ -605,7 +605,7 @@ class ReportChartBuilder
     }
 
     /**
-     * @param  list<array{label: string, current: float, previous?: float|null, suffix?: string}>  $metrics
+     * @param  list<array{label: string, current: float, previous?: float|null, suffix?: string, lower_is_better?: bool}>  $metrics
      */
     private function legacyComparisonChart(array $metrics, array $options = []): string
     {
@@ -620,6 +620,7 @@ class ReportChartBuilder
             $current = (float) $metric['current'];
             $previous = (float) ($metric['previous'] ?? 0);
             $suffix = (string) ($metric['suffix'] ?? '');
+            $delta = $this->metricDelta($metric);
             $currentHeight = max(4, (int) round(($current / $maxValue) * 100));
             $previousHeight = max(4, (int) round(($previous / $maxValue) * 100));
 
@@ -634,6 +635,7 @@ class ReportChartBuilder
                 .'<div class="cmp-metric-values">'
                 .'<span class="cmp-current">'.e($this->formatNumber($current).$suffix).'</span>'
                 .'<span class="cmp-previous">'.e($this->formatNumber($previous).$suffix).'</span>'
+                .($delta ? '<span class="'.$delta['class'].'">'.e($delta['label']).'</span>' : '')
                 .'</div></td>';
         }
 
@@ -645,6 +647,66 @@ class ReportChartBuilder
             .'</div>';
 
         return $this->wrapChart($html, 'comparison wide');
+    }
+
+    /** @param  list<array{label: string, current: float, previous?: float|null, suffix?: string, lower_is_better?: bool}>  $metrics */
+    private function comparisonDeltaSummary(array $metrics): string
+    {
+        $items = [];
+        foreach ($metrics as $metric) {
+            $delta = $this->metricDelta($metric);
+            if (! $delta) {
+                continue;
+            }
+
+            $items[] = '<span class="cmp-delta-item">'
+                .'<span class="cmp-delta-label">'.e((string) $metric['label']).'</span>'
+                .'<span class="'.$delta['class'].'">'.e($delta['label']).'</span>'
+                .'</span>';
+        }
+
+        if ($items === []) {
+            return '';
+        }
+
+        return '<div class="cmp-delta-summary">'.implode('', $items).'</div>';
+    }
+
+    /**
+     * @param  array{current: float, previous?: float|null, lower_is_better?: bool}  $metric
+     * @return array{label: string, class: string}|null
+     */
+    private function metricDelta(array $metric): ?array
+    {
+        if (! isset($metric['previous']) || $metric['previous'] === null) {
+            return null;
+        }
+
+        $current = (float) $metric['current'];
+        $previous = (float) $metric['previous'];
+        $difference = $current - $previous;
+
+        if (abs($difference) < 0.0001) {
+            return ['label' => '0%', 'class' => 'delta-neutral'];
+        }
+
+        $lowerIsBetter = (bool) ($metric['lower_is_better'] ?? false);
+        $class = ($lowerIsBetter ? $difference < 0 : $difference > 0) ? 'delta-up' : 'delta-down';
+        $sign = $difference > 0 ? '+' : '';
+
+        if (abs($previous) < 0.0001) {
+            return [
+                'label' => $sign.$this->formatNumber($difference),
+                'class' => $class,
+            ];
+        }
+
+        $percent = ($difference / $previous) * 100;
+
+        return [
+            'label' => ($percent > 0 ? '+' : '').number_format($percent, 1, '.', '').'%',
+            'class' => $class,
+        ];
     }
 
     /**

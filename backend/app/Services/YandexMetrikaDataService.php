@@ -363,13 +363,26 @@ class YandexMetrikaDataService
     ): array {
         $range = $this->monthRange($periodEnd, $months);
 
+        return $this->fetchMonthlyVisitsByTrafficSourceRange($accessToken, $counterId, $range['from'], $range['to'], $maxSources);
+    }
+
+    /**
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>}
+     */
+    public function fetchMonthlyVisitsByTrafficSourceRange(
+        string $accessToken,
+        string $counterId,
+        string $dateFrom,
+        string $dateTo,
+        int $maxSources = 8,
+    ): array {
         return $this->pivotDateSourceSeries(
             $this->statRequest($accessToken, [
                 'ids' => $counterId,
                 'dimensions' => 'ym:s:month,ym:s:lastTrafficSource',
                 'metrics' => 'ym:s:visits',
-                'date1' => $range['from'],
-                'date2' => $range['to'],
+                'date1' => $dateFrom,
+                'date2' => $dateTo,
                 'sort' => 'ym:s:month',
                 'limit' => 10000,
             ]),
@@ -483,6 +496,20 @@ class YandexMetrikaDataService
     ): array {
         $range = $this->monthRange($periodEnd, $months);
 
+        return $this->fetchSearchEnginesMonthlyTimelineRange($accessToken, $counterId, $range['from'], $range['to'], $maxEngines);
+    }
+
+    /**
+     * @return array{categories: list<string>, series: list<array{name: string, data: list<float>}>}
+     */
+    public function fetchSearchEnginesMonthlyTimelineRange(
+        string $accessToken,
+        string $counterId,
+        string $dateFrom,
+        string $dateTo,
+        int $maxEngines = 8,
+    ): array {
+
         $matrix = [];
         $monthKeys = [];
 
@@ -490,14 +517,14 @@ class YandexMetrikaDataService
             'ids' => $counterId,
             'dimensions' => 'ym:s:month,ym:s:searchEngine',
             'metrics' => 'ym:s:visits',
-            'date1' => $range['from'],
-            'date2' => $range['to'],
+            'date1' => $dateFrom,
+            'date2' => $dateTo,
             'filters' => "ym:s:lastTrafficSource=='organic'",
             'sort' => 'ym:s:month',
             'limit' => 10000,
         ])['data'] ?? [] as $row) {
             $dims = $row['dimensions'] ?? [];
-            $monthRaw = (string) ($dims[0]['name'] ?? $dims[0]['id'] ?? '');
+            $monthRaw = $this->dimensionDateRaw($dims[0] ?? []);
             $engine = (string) ($dims[1]['name'] ?? $dims[1]['id'] ?? '—');
             $visits = (float) ($row['metrics'][0] ?? 0);
 
@@ -667,7 +694,7 @@ class YandexMetrikaDataService
             ->map(function (array $row) use ($labelFormatter) {
                 $dims = $row['dimensions'] ?? [];
                 $metrics = $row['metrics'] ?? [];
-                $rawLabel = (string) ($dims[0]['name'] ?? $dims[0]['id'] ?? '—');
+                $rawLabel = $this->dimensionDateRaw($dims[0] ?? []);
                 $label = $labelFormatter ? $labelFormatter($rawLabel) : $this->formatDayLabel($rawLabel);
 
                 return [
@@ -753,6 +780,10 @@ class YandexMetrikaDataService
 
     private function formatMonthLabel(string $value): string
     {
+        if (preg_match('/^(\d{4})-(\d{2})-\d{2}$/', $value, $matches)) {
+            return $this->formatMonthLabel($matches[1].'-'.$matches[2]);
+        }
+
         if (preg_match('/^(\d{4})-(\d{2})$/', $value, $matches)) {
             $months = [
                 '01' => 'Янв', '02' => 'Фев', '03' => 'Мар', '04' => 'Апр',
@@ -763,7 +794,31 @@ class YandexMetrikaDataService
             return ($months[$matches[2]] ?? $matches[2]).' '.$matches[1];
         }
 
+        if (preg_match('/^(\d{4})(\d{2})$/', $value, $matches)) {
+            return $this->formatMonthLabel($matches[1].'-'.$matches[2]);
+        }
+
         return $value;
+    }
+
+    /**
+     * Метрика может отдавать ym:s:month как name = "3", id = "2026-03-01".
+     * Для графиков берём полный идентификатор, чтобы подпись не теряла год.
+     *
+     * @param  array<string, mixed>  $dimension
+     */
+    private function dimensionDateRaw(array $dimension): string
+    {
+        $id = (string) ($dimension['id'] ?? '');
+        $name = (string) ($dimension['name'] ?? '');
+
+        foreach ([$id, $name] as $value) {
+            if (preg_match('/^\d{4}-\d{2}(-\d{2})?$/', $value) || preg_match('/^\d{6}$/', $value)) {
+                return $value;
+            }
+        }
+
+        return $name !== '' ? $name : ($id !== '' ? $id : '—');
     }
 
     private function truncateUrl(?string $url): string
@@ -810,7 +865,7 @@ class YandexMetrikaDataService
 
         foreach ($payload['data'] ?? [] as $row) {
             $dims = $row['dimensions'] ?? [];
-            $dateRaw = (string) ($dims[0]['name'] ?? $dims[0]['id'] ?? '');
+            $dateRaw = $this->dimensionDateRaw($dims[0] ?? []);
             $sourceId = isset($dims[1]['id']) ? (string) $dims[1]['id'] : null;
             $sourceName = isset($dims[1]['name']) ? (string) $dims[1]['name'] : null;
             $sourceLabel = $this->translateTrafficSource($sourceId, $sourceName);

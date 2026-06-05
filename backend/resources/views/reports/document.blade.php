@@ -127,6 +127,7 @@
         }
         .delta-up { color: #059669; font-weight: bold; }
         .delta-down { color: #dc2626; font-weight: bold; }
+        .delta-neutral { color: #64748b; font-weight: bold; }
         .alert {
             background: #fef2f2;
             border: 1px solid #fecaca;
@@ -172,6 +173,15 @@
             margin-bottom: 12px;
         }
         .chart-footnote { font-size: 11px; color: #64748b; margin-top: 8px; }
+        .cmp-delta-summary { margin-top: 2px; }
+        .cmp-delta-item {
+            display: inline-block;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 4px 8px;
+            margin: 0 6px 6px 0;
+        }
+        .cmp-delta-label { color: #64748b; margin-right: 5px; }
         .hbar-table { width: 100%; border-collapse: collapse; }
         .hbar-table td { padding: 7px 0; vertical-align: middle; border: 0; }
         .hbar-label { width: 34%; color: #334155; font-size: 12px; padding-right: 10px; }

@@ -12,6 +12,15 @@
         $sign = $value > 0 ? '+' : '';
         return $sign . number_format($value, 1, '.', '') . '%';
     };
+    $deltaClass = function (?float $value): string {
+        if ($value === null) {
+            return '';
+        }
+        if (abs($value) < 0.0001) {
+            return 'delta-neutral';
+        }
+        return $value > 0 ? 'delta-up' : 'delta-down';
+    };
     $comparison = null;
     if ($current) {
         $charts = app(\App\Services\ReportChartBuilder::class)->forPdf($forPdf ?? false);
@@ -52,7 +61,8 @@
                     <td>{{ number_format($current['sessions'], 0, '.', ' ') }}</td>
                     @if ($previous)
                         <td>{{ number_format($previous['sessions'], 0, '.', ' ') }}</td>
-                        <td>{{ $formatDelta($delta($current['sessions'], $previous['sessions'])) }}</td>
+                        @php($value = $delta($current['sessions'], $previous['sessions']))
+                        <td><span class="{{ $deltaClass($value) }}">{{ $formatDelta($value) }}</span></td>
                     @endif
                 </tr>
                 <tr>
@@ -60,7 +70,8 @@
                     <td>{{ number_format($current['users'], 0, '.', ' ') }}</td>
                     @if ($previous)
                         <td>{{ number_format($previous['users'], 0, '.', ' ') }}</td>
-                        <td>{{ $formatDelta($delta($current['users'], $previous['users'])) }}</td>
+                        @php($value = $delta($current['users'], $previous['users']))
+                        <td><span class="{{ $deltaClass($value) }}">{{ $formatDelta($value) }}</span></td>
                     @endif
                 </tr>
                 <tr>
@@ -68,7 +79,8 @@
                     <td>{{ number_format($current['engagement_rate'], 1, '.', ' ') }}%</td>
                     @if ($previous)
                         <td>{{ number_format($previous['engagement_rate'], 1, '.', ' ') }}%</td>
-                        <td>{{ $formatDelta($delta($current['engagement_rate'], $previous['engagement_rate'])) }}</td>
+                        @php($value = $delta($current['engagement_rate'], $previous['engagement_rate']))
+                        <td><span class="{{ $deltaClass($value) }}">{{ $formatDelta($value) }}</span></td>
                     @endif
                 </tr>
             </tbody>

@@ -89,6 +89,34 @@ class YandexMetrikaDataServiceTest extends TestCase
         $this->assertSame(100.0, $rows[0]['value']);
     }
 
+    public function test_monthly_series_prefers_full_date_id_over_short_month_name(): void
+    {
+        Http::fake([
+            'api-metrika.yandex.net/stat/v1/data*' => Http::response([
+                'data' => [
+                    [
+                        'dimensions' => [
+                            ['id' => '2026-03-01', 'name' => '3'],
+                            ['id' => 'organic', 'name' => 'Search engine traffic'],
+                        ],
+                        'metrics' => [1228],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $series = app(YandexMetrikaDataService::class)->fetchMonthlyVisitsByTrafficSourceRange(
+            'token',
+            '123',
+            '2026-01-01',
+            '2026-12-31',
+        );
+
+        $this->assertSame(['Мар 2026'], $series['categories']);
+        $this->assertSame('Поисковые системы', $series['series'][0]['name']);
+        $this->assertSame([1228.0], $series['series'][0]['data']);
+    }
+
     public function test_conversions_by_source_calculates_conversion_rate(): void
     {
         Http::fake([

@@ -117,6 +117,40 @@ class ReportBlockRenderersTest extends TestCase
         $this->assertStringContainsString('Заявка', $result->html);
     }
 
+    public function test_metrika_search_engines_timeline_uses_configured_25_month_period(): void
+    {
+        Http::fake([
+            'api-metrika.yandex.net/stat/v1/data*' => Http::response([
+                'data' => [
+                    [
+                        'dimensions' => [
+                            ['name' => '2026-04'],
+                            ['name' => 'Yandex'],
+                        ],
+                        'metrics' => [120],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $user = User::factory()->create();
+        $project = Project::factory()->for($user)->create();
+        $binding = $this->bindIntegration($user, $project, IntegrationProvider::YandexMetrika, '12345');
+        ['context' => $context, 'registry' => $registry] = $this->makeContext($user, $project, [$binding]);
+
+        $result = $registry->render('metrika_search_engines_timeline', $context, [
+            'chart_period' => '25_months',
+        ]);
+
+        $this->assertTrue($result->success);
+        $this->assertStringContainsString('Yandex', $result->html);
+
+        Http::assertSent(fn ($request) => $request['date1'] === '2024-04-01'
+            && $request['date2'] === '2026-04-30'
+            && $request['dimensions'] === 'ym:s:month,ym:s:searchEngine'
+            && $request['filters'] === "ym:s:lastTrafficSource=='organic'");
+    }
+
     public function test_ga_overview_block_renders_metrics(): void
     {
         Http::fake([

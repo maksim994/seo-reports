@@ -39,14 +39,17 @@
               class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand-500 disabled:bg-gray-50"
             />
           </div>
-          <button
-            v-if="!editMode"
-            type="button"
-            class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            @click="applyPreviousMonth"
-          >
-            Прошлый месяц
-          </button>
+          <div v-if="!editMode" class="flex flex-wrap gap-1.5">
+            <button
+              v-for="preset in periodPresets"
+              :key="preset.value"
+              type="button"
+              class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              @click="applyPeriodPreset(preset.value)"
+            >
+              {{ preset.label }}
+            </button>
+          </div>
           <button
             v-if="!editMode"
             type="button"
@@ -112,11 +115,22 @@
                 v-for="block in blocks"
                 :key="block.block_type"
                 type="button"
-                class="flex w-full items-start justify-between gap-2 rounded-lg border border-gray-100 px-2 py-2 text-left hover:bg-gray-50"
+                class="flex w-full items-start justify-between gap-2 rounded-lg border px-2 py-2 text-left transition"
+                :class="
+                  isBlockAdded(block.block_type)
+                    ? 'border-green-200 bg-green-50/70 text-green-900 hover:bg-green-50'
+                    : 'border-gray-100 text-gray-900 hover:bg-gray-50'
+                "
                 @click="addWidget(block.block_type)"
               >
-                <span class="text-sm text-gray-900">{{ block.label }}</span>
-                <span class="shrink-0 text-gray-400">+</span>
+                <span class="text-sm">{{ block.label }}</span>
+                <span
+                  v-if="isBlockAdded(block.block_type)"
+                  class="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700"
+                >
+                  Добавлен
+                </span>
+                <span v-else class="shrink-0 text-gray-400">+</span>
               </button>
             </div>
           </div>
@@ -236,8 +250,19 @@ const settingsWidgetId = ref<string | null>(null)
 const metrikaDynamicOptions = ref<Record<string, Array<{ value: string; label: string }>>>({})
 const metrikaOptionsHint = ref<string | null>(null)
 
+type PeriodPreset = 'previous_month' | '6_months' | '12_months' | '25_months' | 'year_to_date'
+
+const periodPresets: Array<{ value: PeriodPreset; label: string }> = [
+  { value: 'previous_month', label: 'Прошлый месяц' },
+  { value: '6_months', label: '6 мес.' },
+  { value: '12_months', label: '12 мес.' },
+  { value: '25_months', label: '25 мес.' },
+  { value: 'year_to_date', label: 'С 1 января' },
+]
+
 const catalog = computed(() => dashStore.config?.catalog.blocks ?? [])
 const categories = computed(() => dashStore.config?.catalog.categories ?? {})
+const addedBlockTypes = computed(() => new Set(widgets.value.map((w) => w.block_type)))
 
 const filteredCatalog = computed(() => {
   const term = catalogSearch.value.trim().toLowerCase()
@@ -292,6 +317,10 @@ function hasBlockSettings(blockType: string) {
   return blockSchema(blockType).length > 0
 }
 
+function isBlockAdded(blockType: string) {
+  return addedBlockTypes.value.has(blockType)
+}
+
 function widgetTitle(widget: DashboardWidget) {
   return widgetData(widget.id)?.title ?? blockLabel(widget.block_type)
 }
@@ -314,6 +343,37 @@ function applyPreviousMonth() {
   const end = new Date(now.getFullYear(), now.getMonth(), 0)
   periodStart.value = toInputDate(start)
   periodEnd.value = toInputDate(end)
+}
+
+function applyRollingMonths(months: number) {
+  const now = new Date()
+  const end = new Date(now.getFullYear(), now.getMonth(), 0)
+  const start = new Date(end.getFullYear(), end.getMonth() - months + 1, 1)
+  periodStart.value = toInputDate(start)
+  periodEnd.value = toInputDate(end)
+}
+
+function applyYearToDate() {
+  const now = new Date()
+  const end = new Date(now)
+  end.setDate(end.getDate() - 1)
+  const start = new Date(end.getFullYear(), 0, 1)
+  periodStart.value = toInputDate(start)
+  periodEnd.value = toInputDate(end)
+}
+
+function applyPeriodPreset(preset: PeriodPreset) {
+  if (preset === 'previous_month') {
+    applyPreviousMonth()
+    return
+  }
+
+  if (preset === 'year_to_date') {
+    applyYearToDate()
+    return
+  }
+
+  applyRollingMonths(Number.parseInt(preset, 10))
 }
 
 function nextLayoutPosition(): DashboardWidget['layout'] {

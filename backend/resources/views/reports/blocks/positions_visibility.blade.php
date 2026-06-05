@@ -12,7 +12,7 @@
     if ($summary && $previousSummary && $summary['visibility'] !== null && $previousSummary['visibility'] !== null) {
         $comparison = $charts->comparisonChart([
             ['label' => 'Видимость', 'current' => $summary['visibility'], 'previous' => $previousSummary['visibility']],
-            ['label' => 'Средняя поз.', 'current' => $summary['avg'] ?? 0, 'previous' => $previousSummary['avg'] ?? 0],
+            ['label' => 'Средняя поз.', 'current' => $summary['avg'] ?? 0, 'previous' => $previousSummary['avg'] ?? 0, 'lower_is_better' => true],
         ], ['title' => 'Сравнение периодов']);
     }
 @endphp
